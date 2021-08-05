@@ -23,6 +23,7 @@ import Text.Parsec
   , try
   )
 import Text.Parsec.Text (Parser)
+import Text.Printf (printf)
 
 ws :: Parser ()
 ws = spaces
@@ -42,25 +43,11 @@ numP = LispNum <$> pm (read <$> choice [hexInt, expDec, dec, int])
     pm p = p <|> positive p <|> negative p
     int = many1 digit
     negInt = (:) <$> char '-' <*> int
-    hexInt =
-      try $ do
-        char '0'
-        oneOf "xX"
-        digits <- many1 hexDigit
-        return $ "0x" ++ digits
-    dec =
-      try $ do
-        intPart <- many1 digit
-        char '.'
-        fracPart <- many digit
-        return $ intPart ++ "." ++ fracPart ++ "0"
+    hexInt = try $ ("0x" ++) <$> (char '0' *> oneOf "xX" *> many1 hexDigit)
+    dec = try $ printf "%s.%s0" <$> (many1 digit <* char '.') <*> many digit
     decOrInt = dec <|> int
     expDec =
-      try $ do
-        factor <- decOrInt
-        oneOf "eE"
-        exponent <- int <|> negInt
-        return $ factor ++ "e" ++ exponent
+      try $ printf "%se%s" <$> (decOrInt <* oneOf "eE") <*> (int <|> negInt)
 
 stringP :: Parser LispAST
 stringP = (LispString . T.pack) <$> (char '"' *> stringContent <* char '"')
