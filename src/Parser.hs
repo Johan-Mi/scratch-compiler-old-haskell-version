@@ -32,7 +32,7 @@ programP :: Parser [LispAST]
 programP = ws *> many (exprP <* ws)
 
 exprP :: Parser LispAST
-exprP = choice [try numP, stringP, symP, nodeP]
+exprP = choice [try numP, stringP, symP, nodeP, unquoteP]
 
 numP :: Parser LispAST
 numP = LispNum <$> pm (read <$> choice [hexInt, expDec, dec, int])
@@ -65,3 +65,6 @@ inParens p = char '(' *> ws *> p <* ws <* char ')'
 
 nodeP :: Parser LispAST
 nodeP = inParens $ LispNode <$> exprP <*> many (ws *> exprP)
+
+unquoteP :: Parser LispAST
+unquoteP = LispUnquote <$> (char ',' *> ws *> exprP)

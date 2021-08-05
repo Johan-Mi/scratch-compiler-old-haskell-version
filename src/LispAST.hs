@@ -9,4 +9,5 @@ data LispAST
   | LispString T.Text
   | LispSym T.Text
   | LispNode LispAST [LispAST]
+  | LispUnquote LispAST
   deriving (Eq, Show)
