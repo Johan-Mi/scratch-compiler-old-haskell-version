@@ -3,6 +3,7 @@ module Lib
   ) where
 
 import LispAST ()
+import Macro ()
 import Parser ()
 
 someFunc :: IO ()

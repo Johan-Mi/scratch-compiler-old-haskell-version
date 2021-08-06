@@ -27,6 +27,7 @@ library
   exposed-modules:
       Lib
       LispAST
+      Macro
       Parser
   other-modules:
       Paths_scratch_compiler
@@ -58,6 +59,7 @@ test-suite scratch-compiler-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      MacroSpec
       ParserSpec
       Paths_scratch_compiler
   hs-source-dirs:
