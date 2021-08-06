@@ -13,6 +13,7 @@ import Text.Parsec
   ( char
   , choice
   , digit
+  , eof
   , hexDigit
   , letter
   , many
@@ -29,7 +30,7 @@ ws :: Parser ()
 ws = spaces
 
 programP :: Parser [LispAST]
-programP = ws *> many (exprP <* ws)
+programP = ws *> many (exprP <* ws) <* eof
 
 exprP :: Parser LispAST
 exprP = choice [try numP, stringP, symP, nodeP, unquoteP]
