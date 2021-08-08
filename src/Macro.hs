@@ -6,7 +6,6 @@ module Macro
 
 -- TODO: Support nested macros
 import Data.List (partition)
-import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import LispAST (LispAST(..))
 import Text.Printf (printf)
@@ -67,9 +66,7 @@ mkMacro (LispNode _ [LispNode (LispSym name) astParams, body])
 
 subst :: T.Text -> [(T.Text, LispAST)] -> LispAST -> Either MacroError LispAST
 subst name mvars (LispUnquote (LispSym sym)) =
-  case sym `lookup` mvars of
-    Just ast -> Right ast
-    Nothing -> Left $ UnknownMetaVar name sym
+  maybe (Left $ UnknownMetaVar name sym) Right $ sym `lookup` mvars
 subst name mvars (LispNode fun args) = do
   fun' <- subst name mvars fun
   args' <- traverse (subst name mvars) args
@@ -78,8 +75,7 @@ subst name mvars ast = Right ast
 
 withMacros :: [(T.Text, Macro)] -> LispAST -> Either MacroError LispAST
 withMacros ms (LispUnquote _) = error "TODO" -- How should this work?
-withMacros ms sym@(LispSym str) =
-  fromMaybe (Right sym) $ ($ sym) <$> (str `lookup` ms)
+withMacros ms sym@(LispSym str) = maybe (Right sym) ($ sym) $ str `lookup` ms
 withMacros ms (LispNode fun args) = do
   fun' <-
     case withMacros ms fun of
@@ -88,7 +84,7 @@ withMacros ms (LispNode fun args) = do
   args' <- traverse (withMacros ms) args
   let node' = LispNode fun' args'
   case fun' of
-    LispSym str -> fromMaybe (Right node') $ ($ node') <$> (str `lookup` ms)
+    LispSym str -> maybe (Right node') ($ node') $ str `lookup` ms
     _ -> Right node'
 withMacros ms ast = Right ast
 
