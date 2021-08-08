@@ -28,6 +28,7 @@ library
       Lib
       LispAST
       Macro
+      Mid
       Parser
       Utils.Either
       Utils.Maybe

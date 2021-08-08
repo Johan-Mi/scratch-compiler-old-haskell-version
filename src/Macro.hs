@@ -7,8 +7,9 @@ module Macro
 -- TODO: Support nested macros
 import Data.List (partition)
 import qualified Data.Text as T
-import LispAST (LispAST(..), getSym)
+import LispAST (LispAST(..), getSym, isTheFunction)
 import Text.Printf (printf)
+import Utils.Either (maybeToRight)
 
 type Macro = LispAST -> Either MacroError LispAST
 
@@ -37,8 +38,7 @@ instance Show MacroError where
     printf "tried to unquote non-symbol in function macro %s" name
 
 isMacro :: LispAST -> Bool
-isMacro (LispNode (LispSym "macro") _) = True
-isMacro _ = False
+isMacro = isTheFunction "macro"
 
 mkFuncMacro :: T.Text -> [T.Text] -> LispAST -> Macro
 mkFuncMacro name params body = f
@@ -52,9 +52,7 @@ mkFuncMacro name params body = f
         nparams = length params
 
 mkMacro :: LispAST -> Either MacroError (T.Text, Macro)
-mkMacro (LispNode _ [LispSym name, body]) = Right (name, f)
-  where
-    f (LispSym _) = Right body
+mkMacro (LispNode _ [LispSym name, body]) = Right (name, const $ Right body)
 mkMacro (LispNode _ [LispNode (LispSym name) astParams, body])
   | Just params <- traverse getSym astParams =
     Right (name, mkFuncMacro name params body)
@@ -62,11 +60,9 @@ mkMacro (LispNode _ [LispNode (LispSym name) astParams, body])
 
 subst :: T.Text -> [(T.Text, LispAST)] -> LispAST -> Either MacroError LispAST
 subst name mvars (LispUnquote (LispSym sym)) =
-  maybe (Left $ UnknownMetaVar name sym) Right $ sym `lookup` mvars
-subst name mvars (LispNode fun args) = do
-  fun' <- subst name mvars fun
-  args' <- traverse (subst name mvars) args
-  return $ LispNode fun' args'
+  maybeToRight (UnknownMetaVar name sym) $ sym `lookup` mvars
+subst name mvars (LispNode fun args) =
+  LispNode <$> subst name mvars fun <*> traverse (subst name mvars) args
 subst name mvars ast = Right ast
 
 withMacros :: [(T.Text, Macro)] -> LispAST -> Either MacroError LispAST
