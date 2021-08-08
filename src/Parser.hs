@@ -51,7 +51,7 @@ numP = LispNum <$> pm (read <$> choice [hexInt, expDec, dec, int])
       try $ printf "%se%s" <$> (decOrInt <* oneOf "eE") <*> (int <|> negInt)
 
 stringP :: Parser LispAST
-stringP = (LispString . T.pack) <$> (char '"' *> stringContent <* char '"')
+stringP = LispString . T.pack <$> (char '"' *> stringContent <* char '"')
   where
     stringContent = many $ noneOf "\n\""
 

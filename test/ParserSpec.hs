@@ -94,8 +94,8 @@ spec = do
       "(> (* 2 3) (+ 4 5))" ==>
         LispNode
           (LispSym ">")
-          [ (LispNode (LispSym "*") [LispNum 2, LispNum 3])
-          , (LispNode (LispSym "+") [LispNum 4, LispNum 5])
+          [ LispNode (LispSym "*") [LispNum 2, LispNum 3]
+          , LispNode (LispSym "+") [LispNum 4, LispNum 5]
           ]
       "((foo) (bar))" ==>
         LispNode (LispNode (LispSym "foo") []) [LispNode (LispSym "bar") []]
