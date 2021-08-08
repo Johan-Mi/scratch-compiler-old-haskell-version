@@ -29,6 +29,9 @@ library
       LispAST
       Macro
       Parser
+      Utils.Either
+      Utils.Maybe
+      Utils.Text
   other-modules:
       Paths_scratch_compiler
   hs-source-dirs:
