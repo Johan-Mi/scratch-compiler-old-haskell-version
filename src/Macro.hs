@@ -7,7 +7,7 @@ module Macro
 -- TODO: Support nested macros
 import Data.List (partition)
 import qualified Data.Text as T
-import LispAST (LispAST(..))
+import LispAST (LispAST(..), getSym)
 import Text.Printf (printf)
 
 type Macro = LispAST -> Either MacroError LispAST
@@ -40,10 +40,6 @@ isMacro :: LispAST -> Bool
 isMacro (LispNode (LispSym "macro") _) = True
 isMacro _ = False
 
-getName :: LispAST -> Maybe T.Text
-getName (LispSym name) = Just name
-getName _ = Nothing
-
 mkFuncMacro :: T.Text -> [T.Text] -> LispAST -> Macro
 mkFuncMacro name params body = f
   where
@@ -60,7 +56,7 @@ mkMacro (LispNode _ [LispSym name, body]) = Right (name, f)
   where
     f (LispSym _) = Right body
 mkMacro (LispNode _ [LispNode (LispSym name) astParams, body])
-  | Just params <- traverse getName astParams =
+  | Just params <- traverse getSym astParams =
     Right (name, mkFuncMacro name params body)
   | otherwise = Left $ NonSymbolParam name
 
