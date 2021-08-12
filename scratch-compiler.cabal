@@ -29,6 +29,10 @@ library
       LispAST
       Macro
       Mid
+      Mid.Error
+      Mid.Expr
+      Mid.Proc
+      Mid.Sprite
       Parser
       Utils.Either
       Utils.Maybe
