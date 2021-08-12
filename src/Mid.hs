@@ -7,7 +7,7 @@ module Mid
 import Data.List (partition)
 import Data.Maybe (listToMaybe)
 import qualified Data.Text as T
-import LispAST (LispAST(..), getSym)
+import LispAST (LispAST(..), asTheFunction, getSym)
 import Text.Printf (printf)
 import Utils.Either (justFailWith, maybeToRight)
 import Utils.Maybe (partitionMaybe)
@@ -21,6 +21,8 @@ data MidError
   | InvalidItemInSprite LispAST
   | SpriteLacksName
   | NonStringInCostumeList
+  | InvalidProcSignature LispAST
+  | ProcDefLacksSignature
 
 instance Show MidError where
   show (NonSpriteAtTopLevel ast) =
@@ -34,6 +36,10 @@ instance Show MidError where
     printf "invalid item in sprite: `%s`" $ cropTextTo 30 $ T.pack $ show ast
   show SpriteLacksName = "sprite lacks name"
   show NonStringInCostumeList = "non-string in costume list"
+  show (InvalidProcSignature ast) =
+    printf "invalid procedure signature: `%s`" $
+    cropTextTo 30 $ T.pack $ show ast
+  show ProcDefLacksSignature = "procedure definition lacks a signature"
 
 data Program =
   Program
@@ -67,8 +73,7 @@ data Expr
   | FuncCall T.Text [Expr]
 
 mkSprite :: LispAST -> Either MidError Sprite
-mkSprite (LispNode (LispSym "sprite") (name:args)) = do
-  name <- maybeToRight SpriteLacksName $ getSym name
+mkSprite (LispNode (LispSym "sprite") (LispString name:args)) = do
   let (args, costumeLists) = partitionMaybe mkCostumeList args
   let (args, varDecls) = partitionMaybe mkVarDecl args
   let (args, listDecls) = partitionMaybe mkListDecl args
@@ -79,29 +84,46 @@ mkSprite (LispNode (LispSym "sprite") (name:args)) = do
   lists <- concat <$> sequenceA listDecls
   procs <- sequenceA procDefs
   return $ Sprite name costumes vars lists procs
-mkSprite (LispNode (LispSym "sprite") []) = Left SpriteLacksName
+mkSprite (LispNode (LispSym "sprite") _) = Left SpriteLacksName
 mkSprite nonSprite = Left $ NonSpriteAtTopLevel nonSprite
 
 mkCostumeList :: LispAST -> Maybe (Either MidError [T.Text])
-mkCostumeList (LispNode (LispSym "costumes") costumes) =
-  Just $ maybeToRight NonStringInCostumeList $ traverse f costumes
+mkCostumeList =
+  (maybeToRight NonStringInCostumeList . traverse f) `asTheFunction` "costumes"
   where
     f (LispString str) = Just str
     f _ = Nothing
-mkCostumeList _ = Nothing
 
 mkVarDecl :: LispAST -> Maybe (Either MidError [T.Text])
-mkVarDecl (LispNode (LispSym "variables") vars) =
-  Just $ maybeToRight NonSymbolInVarDecl $ traverse getSym vars
-mkVarDecl _ = Nothing
+mkVarDecl =
+  (maybeToRight NonSymbolInVarDecl . traverse getSym) `asTheFunction`
+  "variables"
 
 mkListDecl :: LispAST -> Maybe (Either MidError [T.Text])
-mkListDecl (LispNode (LispSym "lists") lists) =
-  Just $ maybeToRight NonSymbolInListDecl $ traverse getSym lists
-mkListDecl _ = Nothing
+mkListDecl =
+  (maybeToRight NonSymbolInListDecl . traverse getSym) `asTheFunction` "lists"
 
 mkProc :: LispAST -> Maybe (Either MidError Procedure)
-mkProc = undefined
+mkProc = f `asTheFunction` "proc"
+  where
+    f [] = Left ProcDefLacksSignature
+    f (sig:stmts) = do
+      (name, params) <- mkProcSignature sig
+      body <- traverse mkStatement stmts
+      return $ Procedure name params body
+
+mkProcSignature :: LispAST -> Either MidError (T.Text, [Expr])
+mkProcSignature (LispNode (LispSym name) params) =
+  Right (name, mkExpr <$> params)
+mkProcSignature ast = Left $ InvalidProcSignature ast
+
+mkStatement :: LispAST -> Either MidError Statement
+mkStatement = undefined
+
+mkExpr :: LispAST -> Expr
+mkExpr (LispNum n) = Lit $ VNum n
+mkExpr (LispString s) = Lit $ VStr s
+mkExpr (LispSym s) = Sym s
 
 isStage :: Sprite -> Bool
 isStage = (== "Stage") . name

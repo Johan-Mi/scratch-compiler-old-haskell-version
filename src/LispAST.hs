@@ -1,9 +1,11 @@
 module LispAST
   ( LispAST(..)
   , isTheFunction
+  , asTheFunction
   , getSym
   ) where
 
+import Control.Monad (guard)
 import qualified Data.Text as T
 import Text.Printf (printf)
 
@@ -25,6 +27,11 @@ instance Show LispAST where
 isTheFunction :: T.Text -> LispAST -> Bool
 isTheFunction func (LispNode (LispSym str) _) = str == func
 isTheFunction _ _ = False
+
+asTheFunction :: ([LispAST] -> a) -> T.Text -> LispAST -> Maybe a
+asTheFunction f name (LispNode (LispSym str) args) =
+  guard (str == name) >> return (f args)
+asTheFunction _ _ _ = Nothing
 
 getSym :: LispAST -> Maybe T.Text
 getSym (LispSym sym) = Just sym
