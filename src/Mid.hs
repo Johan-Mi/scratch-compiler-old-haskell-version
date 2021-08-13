@@ -1,5 +1,6 @@
 module Mid
-  (
+  ( Program
+  , mkProgram
   ) where
 
 import Data.List (partition)
@@ -12,6 +13,7 @@ data Program =
     { scene :: Sprite
     , sprites :: [Sprite]
     }
+  deriving (Show)
 
 mkProgram :: [LispAST] -> Either MidError Program
 mkProgram asts = do

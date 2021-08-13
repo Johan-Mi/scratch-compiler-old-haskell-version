@@ -22,6 +22,7 @@ data Sprite =
     , lists :: [T.Text]
     , procedures :: [Procedure]
     }
+  deriving (Show)
 
 isStage :: Sprite -> Bool
 isStage = (== "Stage") . name

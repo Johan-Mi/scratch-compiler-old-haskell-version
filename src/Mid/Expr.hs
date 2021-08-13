@@ -11,11 +11,13 @@ import Mid.Error (MidError(..))
 data Value
   = VNum Double
   | VStr T.Text
+  deriving (Show)
 
 data Expr
   = Lit Value
   | Sym T.Text
   | FuncCall T.Text [Expr]
+  deriving (Show)
 
 mkExpr :: LispAST -> Either MidError Expr
 mkExpr (LispNum n) = Right $ Lit $ VNum n

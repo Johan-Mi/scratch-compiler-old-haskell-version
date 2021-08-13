@@ -13,6 +13,7 @@ import Mid.Expr (Expr, mkExpr)
 
 data Procedure =
   Procedure T.Text [Expr] [Statement]
+  deriving (Show)
 
 mkProc :: LispAST -> Maybe (Either MidError Procedure)
 mkProc = f `asTheFunction` "proc"
@@ -37,6 +38,7 @@ data Statement
   | Until Expr [Statement]
   | While Expr [Statement]
   | For Expr Expr [Statement]
+  deriving (Show)
 
 mkStatement :: LispAST -> Either MidError Statement
 mkStatement (LispNode (LispSym name) args) =
