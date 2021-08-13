@@ -17,6 +17,8 @@ data MidError
   | NonStringInCostumeList
   | InvalidProcSignature LispAST
   | ProcDefLacksSignature
+  | NotAStatement LispAST
+  | NotAnExpression LispAST
 
 instance Show MidError where
   show (NonSpriteAtTopLevel ast) =
@@ -34,3 +36,7 @@ instance Show MidError where
     printf "invalid procedure signature: `%s`" $
     cropTextTo 30 $ T.pack $ show ast
   show ProcDefLacksSignature = "procedure definition lacks a signature"
+  show (NotAStatement ast) =
+    printf "not a statement: `%s`" $ cropTextTo 30 $ T.pack $ show ast
+  show (NotAnExpression ast) =
+    printf "not an expression: `%s`" $ cropTextTo 30 $ T.pack $ show ast

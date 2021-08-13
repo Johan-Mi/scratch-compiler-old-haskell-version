@@ -6,6 +6,7 @@ module Mid.Expr
 
 import qualified Data.Text as T
 import LispAST (LispAST(..))
+import Mid.Error (MidError(..))
 
 data Value
   = VNum Double
@@ -16,7 +17,9 @@ data Expr
   | Sym T.Text
   | FuncCall T.Text [Expr]
 
-mkExpr :: LispAST -> Expr
-mkExpr (LispNum n) = Lit $ VNum n
-mkExpr (LispString s) = Lit $ VStr s
-mkExpr (LispSym s) = Sym s
+mkExpr :: LispAST -> Either MidError Expr
+mkExpr (LispNum n) = Right $ Lit $ VNum n
+mkExpr (LispString s) = Right $ Lit $ VStr s
+mkExpr (LispSym s) = Right $ Sym s
+mkExpr (LispNode (LispSym name) args) = FuncCall name <$> traverse mkExpr args
+mkExpr ast = Left $ NotAnExpression ast
