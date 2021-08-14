@@ -19,6 +19,7 @@ data MidError
   | ProcDefLacksSignature
   | NotAStatement LispAST
   | NotAnExpression LispAST
+  | InvalidArgumentsFor T.Text
 
 instance Show MidError where
   show (NonSpriteAtTopLevel ast) =
@@ -40,3 +41,4 @@ instance Show MidError where
     printf "not a statement: `%s`" $ cropTextTo 30 $ T.pack $ show ast
   show (NotAnExpression ast) =
     printf "not an expression: `%s`" $ cropTextTo 30 $ T.pack $ show ast
+  show (InvalidArgumentsFor name) = printf "invalid arguments for `%s`" name

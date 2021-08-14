@@ -61,22 +61,27 @@ specialStatements =
 stmtIfElse :: [LispAST] -> Either MidError Statement
 stmtIfElse [cond, true, false] =
   IfElse <$> mkExpr cond <*> mkStatement true <*> mkStatement false
+stmtIfElse _ = Left $ InvalidArgumentsFor "if"
 
 stmtDo :: [LispAST] -> Either MidError Statement
 stmtDo = fmap Do . traverse mkStatement
 
 stmtRepeat :: [LispAST] -> Either MidError Statement
 stmtRepeat (times:body) = Repeat <$> mkExpr times <*> traverse mkStatement body
+stmtRepeat _ = Left $ InvalidArgumentsFor "repeat"
 
 stmtForever :: [LispAST] -> Either MidError Statement
 stmtForever = fmap Forever . traverse mkStatement
 
 stmtUntil :: [LispAST] -> Either MidError Statement
 stmtUntil (cond:body) = Until <$> mkExpr cond <*> traverse mkStatement body
+stmtUntil _ = Left $ InvalidArgumentsFor "until"
 
 stmtWhile :: [LispAST] -> Either MidError Statement
 stmtWhile (cond:body) = While <$> mkExpr cond <*> traverse mkStatement body
+stmtWhile _ = Left $ InvalidArgumentsFor "while"
 
 stmtFor :: [LispAST] -> Either MidError Statement
 stmtFor (var:times:body) =
   For <$> mkExpr var <*> mkExpr times <*> traverse mkStatement body
+stmtFor _ = Left $ InvalidArgumentsFor "for"

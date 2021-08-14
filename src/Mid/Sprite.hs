@@ -28,17 +28,17 @@ isStage :: Sprite -> Bool
 isStage = (== "Stage") . name
 
 mkSprite :: LispAST -> Either MidError Sprite
-mkSprite (LispNode (LispSym "sprite") (LispString name:args)) = do
+mkSprite (LispNode (LispSym "sprite") (LispString name':args)) = do
   let (args1, costumeLists) = partitionMaybe mkCostumeList args
   let (args2, varDecls) = partitionMaybe mkVarDecl args1
   let (args3, listDecls) = partitionMaybe mkListDecl args2
   let (remaining, procDefs) = partitionMaybe mkProc args3
   justFailWith InvalidItemInSprite $ listToMaybe remaining
-  costumes <- concat <$> sequenceA costumeLists
+  costumes' <- concat <$> sequenceA costumeLists
   vars <- concat <$> sequenceA varDecls
-  lists <- concat <$> sequenceA listDecls
-  procs <- sequenceA procDefs
-  return $ Sprite name costumes vars lists procs
+  lists' <- concat <$> sequenceA listDecls
+  procedures' <- sequenceA procDefs
+  return $ Sprite name' costumes' vars lists' procedures'
 mkSprite (LispNode (LispSym "sprite") _) = Left SpriteLacksName
 mkSprite nonSprite = Left $ NonSpriteAtTopLevel nonSprite
 

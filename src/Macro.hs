@@ -50,6 +50,7 @@ mkFuncMacro name params body = f
       where
         nargs = length args
         nparams = length params
+    f _ = undefined -- This should never happen
 
 mkMacro :: LispAST -> Either MacroError (T.Text, Macro)
 mkMacro (LispNode _ [LispSym name, body]) = Right (name, const $ Right body)
@@ -57,16 +58,17 @@ mkMacro (LispNode _ [LispNode (LispSym name) astParams, body])
   | Just params <- traverse getSym astParams =
     Right (name, mkFuncMacro name params body)
   | otherwise = Left $ NonSymbolParam name
+mkMacro _ = undefined -- This should never happen
 
 subst :: T.Text -> [(T.Text, LispAST)] -> LispAST -> Either MacroError LispAST
 subst name mvars (LispUnquote (LispSym sym)) =
   maybeToRight (UnknownMetaVar name sym) $ sym `lookup` mvars
 subst name mvars (LispNode fun args) =
   LispNode <$> subst name mvars fun <*> traverse (subst name mvars) args
-subst name mvars ast = Right ast
+subst _ _ ast = Right ast
 
 withMacros :: [(T.Text, Macro)] -> LispAST -> Either MacroError LispAST
-withMacros ms (LispUnquote _) = error "TODO" -- How should this work?
+withMacros _ (LispUnquote _) = error "TODO" -- How should this work?
 withMacros ms sym@(LispSym str) = maybe (Right sym) ($ sym) $ str `lookup` ms
 withMacros ms (LispNode fun args) = do
   fun' <-
@@ -78,7 +80,7 @@ withMacros ms (LispNode fun args) = do
   case fun' of
     LispSym str -> maybe (Right node') ($ node') $ str `lookup` ms
     _ -> Right node'
-withMacros ms ast = Right ast
+withMacros _ ast = Right ast
 
 expandMacros :: [LispAST] -> Either MacroError [LispAST]
 expandMacros ast = do
