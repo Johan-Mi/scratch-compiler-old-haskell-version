@@ -29,10 +29,10 @@ isStage = (== "Stage") . name
 
 mkSprite :: LispAST -> Either MidError Sprite
 mkSprite (LispNode (LispSym "sprite") (LispString name:args)) = do
-  let (args, costumeLists) = partitionMaybe mkCostumeList args
-  let (args, varDecls) = partitionMaybe mkVarDecl args
-  let (args, listDecls) = partitionMaybe mkListDecl args
-  let (remaining, procDefs) = partitionMaybe mkProc args
+  let (args1, costumeLists) = partitionMaybe mkCostumeList args
+  let (args2, varDecls) = partitionMaybe mkVarDecl args1
+  let (args3, listDecls) = partitionMaybe mkListDecl args2
+  let (remaining, procDefs) = partitionMaybe mkProc args3
   justFailWith InvalidItemInSprite $ listToMaybe remaining
   costumes <- concat <$> sequenceA costumeLists
   vars <- concat <$> sequenceA varDecls
