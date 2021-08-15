@@ -2,8 +2,9 @@
 {-# LANGUAGE TupleSections #-}
 
 module Mid.Proc
-  ( Procedure
+  ( Procedure(..)
   , mkProc
+  , Statement(..)
   ) where
 
 import qualified Data.Text as T

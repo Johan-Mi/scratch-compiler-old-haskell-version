@@ -4,10 +4,12 @@ module Mid.Sprite
   ( Sprite
   , mkSprite
   , isStage
+  , procedures
   ) where
 
 import Data.Maybe (listToMaybe)
 import qualified Data.Text as T
+import Lens.Micro (Lens')
 import LispAST (LispAST(..), asTheFunction, getSym)
 import Mid.Error (MidError(..))
 import Mid.Proc (Procedure, mkProc)
@@ -16,16 +18,19 @@ import Utils.Maybe (partitionMaybe)
 
 data Sprite =
   Sprite
-    { name :: T.Text
-    , costumes :: [T.Text]
-    , variables :: [T.Text]
-    , lists :: [T.Text]
-    , procedures :: [Procedure]
+    { _name :: T.Text
+    , _costumes :: [T.Text]
+    , _variables :: [T.Text]
+    , _lists :: [T.Text]
+    , _procedures :: [Procedure]
     }
   deriving (Show)
 
+procedures :: Lens' Sprite [Procedure]
+procedures f (Sprite nm co va li pr) = (\pr' -> Sprite nm co va li pr') <$> f pr
+
 isStage :: Sprite -> Bool
-isStage = (== "Stage") . name
+isStage = (== "Stage") . _name
 
 mkSprite :: LispAST -> Either MidError Sprite
 mkSprite (LispNode (LispSym "sprite") (LispString name':args)) = do
