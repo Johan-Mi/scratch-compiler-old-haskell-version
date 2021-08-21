@@ -33,8 +33,11 @@ library
       Mid.Expr
       Mid.Proc
       Mid.Sprite
+      Optimizations
+      Optimize
       Parser
       Utils.Either
+      Utils.Functor
       Utils.Maybe
       Utils.Text
   other-modules:

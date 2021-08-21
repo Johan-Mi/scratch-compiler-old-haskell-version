@@ -1,6 +1,7 @@
 module Parser
   ( programP
   , numP
+  , numberP
   , stringP
   , symP
   , nodeP
@@ -35,8 +36,21 @@ programP = ws *> many (exprP <* ws) <* eof
 exprP :: Parser LispAST
 exprP = choice [try numP, stringP, symP, nodeP, unquoteP]
 
-numP :: Parser LispAST
-numP = LispNum <$> pm (read <$> choice [hexInt, expDec, dec, int])
+-- TODO: ECMAScript-compliant number parser
+--
+-- StrNumericLiteral :::
+--   StrDecimalLiteral
+--   NonDecimalIntegerLiteral
+-- StrDecimalLiteral :::
+--   StrUnsignedDecimalLiteral
+--   + StrUnsignedDecimalLiteral
+--   - StrUnsignedDecimalLiteral
+-- StrUnsignedDecimalLiteral :::
+--   Infinity
+--   DecimalDigits? . DecimalDigits[~Sep]opt ExponentPart?
+--   DecimalDigits ExponentPart[~Sep]opt
+numberP :: Parser Double
+numberP = pm (read <$> choice [hexInt, expDec, dec, int])
   where
     positive = (char '+' *>)
     negative :: Parser Double -> Parser Double
@@ -49,6 +63,9 @@ numP = LispNum <$> pm (read <$> choice [hexInt, expDec, dec, int])
     decOrInt = dec <|> int
     expDec =
       try $ printf "%se%s" <$> (decOrInt <* oneOf "eE") <*> (int <|> negInt)
+
+numP :: Parser LispAST
+numP = LispNum <$> numberP
 
 stringP :: Parser LispAST
 stringP = LispString . T.pack <$> (char '"' *> stringContent <* char '"')
