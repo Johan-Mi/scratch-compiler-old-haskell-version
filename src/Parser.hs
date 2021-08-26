@@ -8,6 +8,7 @@ module Parser
   ) where
 
 import Control.Applicative ((<|>))
+import Control.Monad (void)
 import qualified Data.Text as T
 import LispAST (LispAST(..))
 import Text.Parsec
@@ -21,14 +22,18 @@ import Text.Parsec
   , many1
   , noneOf
   , oneOf
-  , spaces
+  , skipMany
+  , space
   , try
   )
 import Text.Parsec.Text (Parser)
 import Text.Printf (printf)
 
+comment :: Parser ()
+comment = char ';' *> skipMany (noneOf "\n") *> (void (char '\n') <|> eof)
+
 ws :: Parser ()
-ws = spaces
+ws = skipMany $ void space <|> comment
 
 programP :: Parser [LispAST]
 programP = ws *> many (exprP <* ws) <* eof
