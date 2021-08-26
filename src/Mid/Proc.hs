@@ -5,9 +5,13 @@ module Mid.Proc
   ( Procedure(..)
   , mkProc
   , Statement(..)
+  , subStmts
+  , stmtExprs
   ) where
 
+import Data.Functor ((<&>))
 import qualified Data.Text as T
+import Lens.Micro (Traversal')
 import LispAST (LispAST(..), asTheFunction)
 import Mid.Error (MidError(..))
 import Mid.Expr (Expr, mkExpr)
@@ -86,3 +90,25 @@ stmtFor :: [LispAST] -> Either MidError Statement
 stmtFor (var:times:body) =
   For <$> mkExpr var <*> mkExpr times <*> traverse mkStatement body
 stmtFor _ = Left $ InvalidArgumentsFor "for"
+
+subStmts :: Traversal' Statement Statement
+subStmts _ pc@(ProcCall _ _) = pure pc
+subStmts f (Do stmts) = Do <$> traverse f stmts
+subStmts f (IfElse cond true false) = IfElse cond <$> f true <*> f false
+subStmts f (Repeat times body) = Repeat times <$> traverse f body
+subStmts f (Forever body) = Forever <$> traverse f body
+subStmts f (Until cond body) = Until cond <$> traverse f body
+subStmts f (While cond body) = While cond <$> traverse f body
+subStmts f (For var times body) = For var times <$> traverse f body
+
+stmtExprs :: Traversal' Statement Expr
+stmtExprs f stmt =
+  case stmt of
+    (ProcCall name args) -> ProcCall name <$> traverse f args
+    (Do stmts) -> pure $ Do stmts
+    (IfElse cond true false) -> IfElse <$> f cond <&> ($ true) <&> ($ false)
+    (Repeat times body) -> Repeat <$> f times <&> ($ body)
+    (Forever body) -> pure $ Forever body
+    (Until cond body) -> Until <$> f cond <&> ($ body)
+    (While cond body) -> While <$> f cond <&> ($ body)
+    (For var times body) -> For <$> f var <*> f times <&> ($ body)
