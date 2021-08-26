@@ -2,13 +2,19 @@
 
 module Optimizations
   ( exprOptimizations
+  , stmtOptimizations
   ) where
 
 import Mid.Expr (Expr(..), Value(..), getLit, toBool)
+import Mid.Proc (Statement(..))
 import Utils.Maybe (partitionMaybe)
 
 exprOptimizations :: [Expr -> Maybe Expr]
 exprOptimizations = [notNot, deMorgan, constNot, constAnd, constOr]
+
+stmtOptimizations :: [Statement -> Maybe Statement]
+stmtOptimizations =
+  [flattenDo, ifConstCondition, whileConstCondition, untilConstCondition]
 
 -- Remove double `not`s
 notNot :: Expr -> Maybe Expr
@@ -54,3 +60,35 @@ constOr (FuncCall "or" args)
     (unknown, known') = partitionMaybe getLit args
     known = toBool <$> known'
 constOr _ = Nothing
+
+-- Flatten `Do` blocks
+flattenDo :: Statement -> Maybe Statement
+flattenDo (Do [stmt]) = Just stmt
+flattenDo _ = Nothing
+
+-- Remove if statements with a constant condition
+ifConstCondition :: Statement -> Maybe Statement
+ifConstCondition (IfElse (Lit cond) true false) =
+  Just $
+  if toBool cond
+    then true
+    else false
+ifConstCondition _ = Nothing
+
+-- While loops with a constant condition do nothing or loop forever
+whileConstCondition :: Statement -> Maybe Statement
+whileConstCondition (While (Lit cond) body) =
+  Just $
+  if toBool cond
+    then Forever body
+    else Do []
+whileConstCondition _ = Nothing
+
+-- Until loops with a constant condition do nothing or loop forever
+untilConstCondition :: Statement -> Maybe Statement
+untilConstCondition (Until (Lit cond) body) =
+  Just $
+  if toBool cond
+    then Do []
+    else Forever body
+untilConstCondition _ = Nothing

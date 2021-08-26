@@ -3,12 +3,12 @@ module Optimize
   ) where
 
 import Data.Foldable (asum)
-import Lens.Micro ((%~), each, rewriteOf)
+import Lens.Micro ((%~), each, rewriteOf, transformOf)
 import Mid (Program, scene, sprites)
 import Mid.Expr (Expr, subExprs)
-import Mid.Proc (Procedure(..), Statement)
+import Mid.Proc (Procedure(..), Statement, stmtExprs, subStmts)
 import Mid.Sprite (Sprite, procedures)
-import Optimizations (exprOptimizations)
+import Optimizations (exprOptimizations, stmtOptimizations)
 import Utils.Functor (flap)
 
 class Optimizable a where
@@ -25,7 +25,9 @@ instance Optimizable Procedure where
     Procedure name params (optimize <$> body)
 
 instance Optimizable Statement where
-  optimize = id -- TODO
+  optimize =
+    rewriteOf subStmts (asum . flap stmtOptimizations) .
+    transformOf subStmts (stmtExprs %~ optimize)
 
 instance Optimizable Expr where
   optimize = rewriteOf subExprs $ asum . flap exprOptimizations
