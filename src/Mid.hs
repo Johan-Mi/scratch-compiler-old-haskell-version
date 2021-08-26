@@ -19,10 +19,10 @@ data Program =
   deriving (Show)
 
 scene :: Lens' Program Sprite
-scene f (Program sc sp) = (\sc' -> Program sc' sp) <$> f sc
+scene f prg = (\sc -> prg {_scene = sc}) <$> f (_scene prg)
 
 sprites :: Lens' Program [Sprite]
-sprites f (Program sc sp) = (\sp' -> Program sc sp') <$> f sp
+sprites f prg = (\spr -> prg {_sprites = spr}) <$> f (_sprites prg)
 
 mkProgram :: [LispAST] -> Either MidError Program
 mkProgram asts = do

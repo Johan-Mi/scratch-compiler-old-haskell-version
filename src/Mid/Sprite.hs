@@ -27,7 +27,7 @@ data Sprite =
   deriving (Show)
 
 procedures :: Lens' Sprite [Procedure]
-procedures f (Sprite nm co va li pr) = (\pr' -> Sprite nm co va li pr') <$> f pr
+procedures f spr = (\procs -> spr {_procedures = procs}) <$> f (_procedures spr)
 
 isStage :: Sprite -> Bool
 isStage = (== "Stage") . _name
