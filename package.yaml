@@ -25,6 +25,11 @@ dependencies:
 - text
 - microlens
 - hspec
+- zip-archive
+- binary
+- bytestring
+- filepath
+- pureMD5
 
 library:
   source-dirs: src
