@@ -4,7 +4,7 @@ module Optimize
 
 import Data.Foldable (asum)
 import Lens.Micro ((%~), each, rewriteOf, transformOf)
-import Mid (Program, scene, sprites)
+import Mid (Program, targets)
 import Mid.Expr (Expr, subExprs)
 import Mid.Proc (Procedure(..), Statement, stmtExprs, subStmts)
 import Mid.Sprite (Sprite, procedures)
@@ -15,7 +15,7 @@ class Optimizable a where
   optimize :: a -> a
 
 instance Optimizable Program where
-  optimize = (scene %~ optimize) . (sprites . each %~ optimize)
+  optimize = targets . each %~ optimize
 
 instance Optimizable Sprite where
   optimize = procedures . each %~ optimize
