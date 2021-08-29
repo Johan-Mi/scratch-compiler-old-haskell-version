@@ -5,6 +5,8 @@ module Mid.Sprite
   , mkSprite
   , isStage
   , procedures
+  , spriteName
+  , costumes
   ) where
 
 import Data.Maybe (listToMaybe)
@@ -25,6 +27,12 @@ data Sprite =
     , _procedures :: [Procedure]
     }
   deriving (Show)
+
+spriteName :: Lens' Sprite T.Text
+spriteName f spr = (\name -> spr {_name = name}) <$> f (_name spr)
+
+costumes :: Lens' Sprite [(T.Text, FilePath)]
+costumes f spr = (\csts -> spr {_costumes = csts}) <$> f (_costumes spr)
 
 procedures :: Lens' Sprite [Procedure]
 procedures f spr = (\procs -> spr {_procedures = procs}) <$> f (_procedures spr)
