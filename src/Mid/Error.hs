@@ -15,6 +15,7 @@ data MidError
   | InvalidItemInSprite LispAST
   | SpriteLacksName
   | NonStringInCostumeList
+  | CostumeLacksFilePath T.Text
   | InvalidProcSignature LispAST
   | ProcDefLacksSignature
   | NotAStatement LispAST
@@ -33,6 +34,8 @@ instance Show MidError where
     printf "invalid item in sprite: `%s`" $ cropTextTo 30 $ T.pack $ show ast
   show SpriteLacksName = "sprite lacks name"
   show NonStringInCostumeList = "non-string in costume list"
+  show (CostumeLacksFilePath name) =
+    printf "costume `%s` lacks a file path" name
   show (InvalidProcSignature ast) =
     printf "invalid procedure signature: `%s`" $
     cropTextTo 30 $ T.pack $ show ast

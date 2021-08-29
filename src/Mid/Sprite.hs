@@ -19,7 +19,7 @@ import Utils.Maybe (partitionMaybe)
 data Sprite =
   Sprite
     { _name :: T.Text
-    , _costumes :: [T.Text]
+    , _costumes :: [(T.Text, FilePath)]
     , _variables :: [T.Text]
     , _lists :: [T.Text]
     , _procedures :: [Procedure]
@@ -47,12 +47,13 @@ mkSprite (LispNode (LispSym "sprite") (LispString name':args)) = do
 mkSprite (LispNode (LispSym "sprite") _) = Left SpriteLacksName
 mkSprite nonSprite = Left $ NonSpriteAtTopLevel nonSprite
 
-mkCostumeList :: LispAST -> Maybe (Either MidError [T.Text])
-mkCostumeList =
-  (maybeToRight NonStringInCostumeList . traverse f) `asTheFunction` "costumes"
+mkCostumeList :: LispAST -> Maybe (Either MidError [(T.Text, FilePath)])
+mkCostumeList = f `asTheFunction` "costumes"
   where
-    f (LispString str) = Just str
-    f _ = Nothing
+    f [] = Right []
+    f [LispString name] = Left $ CostumeLacksFilePath name
+    f (LispString name:LispString path:xs) = ((name, T.unpack path) :) <$> f xs
+    f _ = Left NonStringInCostumeList
 
 mkVarDecl :: LispAST -> Maybe (Either MidError [T.Text])
 mkVarDecl =
