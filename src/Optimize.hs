@@ -15,7 +15,7 @@ class Optimizable a where
   optimize :: a -> a
 
 instance Optimizable Program where
-  optimize = targets . each %~ optimize
+  optimize = targets %~ optimize
 
 instance Optimizable Sprite where
   optimize = procedures . each %~ optimize

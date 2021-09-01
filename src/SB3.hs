@@ -17,7 +17,7 @@ import Control.Arrow ((&&&))
 import Data.Binary (encodeFile)
 import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
-import Lens.Micro ((^.))
+import Lens.Micro ((^.), (^..))
 import Mid (Program, targets)
 import Mid.Sprite (Sprite, costumes, isStage, spriteName)
 
@@ -39,7 +39,7 @@ addFilesToArchiveAt paths arch = foldr addEntryToArchive arch <$> entries
 projectJSON :: Program -> IO (JValue, [Asset])
 projectJSON prg = do
   let meta = JObj [("semver", JStr "3.0.0")]
-  (targets', assetLists) <- unzip <$> traverse spriteJSON (prg ^. targets)
+  (targets', assetLists) <- unzip <$> traverse spriteJSON (prg ^.. targets)
   let assets = concat assetLists
   return (JObj [("meta", meta), ("targets", JArr targets')], assets)
 
