@@ -66,6 +66,8 @@ specialStatements =
 stmtIfElse :: [LispAST] -> Either MidError Statement
 stmtIfElse [cond, true, false] =
   IfElse <$> mkExpr cond <*> mkStatement true <*> mkStatement false
+stmtIfElse [cond, true] =
+  IfElse <$> mkExpr cond <*> mkStatement true <&> ($ Do [])
 stmtIfElse _ = Left $ InvalidArgumentsFor "if"
 
 stmtDo :: [LispAST] -> Either MidError Statement
