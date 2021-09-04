@@ -80,7 +80,7 @@ stringP = LispString . T.pack <$> (char '"' *> stringContent <* char '"')
 symP :: Parser LispAST
 symP = LispSym . T.pack <$> ((:) <$> firstChar <*> many nonFirstChar)
   where
-    firstChar = letter <|> oneOf "!$%&*+-./:<=>?@^_~"
+    firstChar = letter <|> oneOf "!$%&*+-./:<=>?@^_~[]"
     nonFirstChar = firstChar <|> digit
 
 inParens :: Parser a -> Parser a
