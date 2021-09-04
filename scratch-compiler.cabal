@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Asset
+      Block
       JSON
       Lib
       LispAST
@@ -54,6 +55,7 @@ library
     , filepath
     , hspec
     , microlens
+    , mtl
     , parsec
     , pureMD5
     , text
@@ -74,6 +76,7 @@ executable scratch-compiler-exe
     , filepath
     , hspec
     , microlens
+    , mtl
     , parsec
     , pureMD5
     , scratch-compiler
@@ -98,6 +101,7 @@ test-suite scratch-compiler-test
     , filepath
     , hspec
     , microlens
+    , mtl
     , parsec
     , pureMD5
     , scratch-compiler

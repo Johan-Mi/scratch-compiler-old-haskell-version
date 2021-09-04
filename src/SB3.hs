@@ -5,6 +5,7 @@ module SB3
   ) where
 
 import Asset (Asset(assetPath), assetId, assetJSON, makeAsset)
+import Block (Env(..), procToBlocks)
 import Codec.Archive.Zip
   ( Archive
   , Entry(eRelativePath)
@@ -19,7 +20,7 @@ import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
 import Lens.Micro ((^.), (^..))
 import Mid (Program, targets)
-import Mid.Sprite (Sprite, costumes, isStage, spriteName)
+import Mid.Sprite (Sprite, costumes, isStage, procedures, spriteName)
 
 writeSB3File :: Program -> IO ()
 writeSB3File prg = do
@@ -46,6 +47,17 @@ projectJSON prg = do
 spriteJSON :: Sprite -> IO (JValue, [Asset])
 spriteJSON spr = do
   costumes' <- traverse (uncurry makeAsset) $ spr ^. costumes
+  let env =
+        Env
+          { _envParent = Nothing
+          , _envNext = Nothing
+          , _envProcs = []
+          , _envLocalVars = []
+          , _envGlobalVars = []
+          , _envLocalLists = []
+          , _envGlobalLists = []
+          }
+  let Right blocks = concat <$> traverse (procToBlocks env) (spr ^. procedures)
   return
     ( JObj
         [ ("name", JStr (spr ^. spriteName))
@@ -54,6 +66,6 @@ spriteJSON spr = do
         , ("costumes", JArr (assetJSON <$> costumes'))
         , ("currentCostume", JNum 1)
         , ("sounds", JArr [])
-        , ("blocks", JObj [])
+        , ("blocks", JObj blocks)
         ]
     , costumes')
