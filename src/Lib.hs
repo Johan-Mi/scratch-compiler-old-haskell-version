@@ -23,7 +23,7 @@ compileProgram path = do
   expanded <- withExceptT show $ liftEither $ expandMacros parsed
   prg <- withExceptT show $ liftEither $ mkProgram expanded
   let optimized = optimize prg
-  liftIO $ writeSB3File optimized
+  withExceptT show $ writeSB3File optimized
 
 someFunc :: IO ()
 someFunc = do

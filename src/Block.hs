@@ -2,12 +2,13 @@
 {-# LANGUAGE TupleSections #-}
 
 module Block
-  ( procToBlocks
-  , Env(..)
+  ( Env(..)
+  , BlockError
+  , procToBlocks
   ) where
 
 import Control.Monad (unless)
-import Control.Monad.Except (Except, runExcept, throwError)
+import Control.Monad.Except (Except, throwError)
 import Control.Monad.RWS (RWST, evalRWST)
 import Control.Monad.Reader (asks, local)
 import Control.Monad.State (get, modify, put)
@@ -20,12 +21,14 @@ import Mid.Expr (Expr(..), Value(..))
 import Mid.Proc (Procedure(..), Statement(..))
 import Text.Printf (printf)
 
-newtype BlockError =
-  InvalidParamsForSpecialProcDef T.Text
+data BlockError
+  = InvalidParamsForSpecialProcDef T.Text
+  | UnknownProc T.Text
 
 instance Show BlockError where
   show (InvalidParamsForSpecialProcDef procName) =
     printf "invalid arguments for definition of special procedure `%s`" procName
+  show (UnknownProc procName) = printf "unknown procedure `%s`" procName
 
 type UID = T.Text
 
@@ -52,7 +55,7 @@ data Env =
   Env
     { _envParent :: Maybe UID
     , _envNext :: Maybe UID
-    , _envProcs :: [(T.Text, UID)]
+    , _envProcs :: [T.Text]
     , _envLocalVars :: [(T.Text, UID)]
     , _envGlobalVars :: [(T.Text, UID)]
     , _envLocalLists :: [(T.Text, UID)]
@@ -73,8 +76,8 @@ withNext = local . set envNext
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
 
-procToBlocks :: Env -> Procedure -> Either BlockError [(T.Text, JValue)]
-procToBlocks env proc = runExcept $ snd <$> evalRWST (bProc proc) env ([], 0)
+procToBlocks :: Env -> Procedure -> Except BlockError [(T.Text, JValue)]
+procToBlocks env proc = snd <$> evalRWST (bProc proc) env ([], 0)
 
 bProc :: Procedure -> Blocky ()
 bProc (Procedure "when-flag-clicked" params body) = do
@@ -94,12 +97,70 @@ bProc (Procedure "when-flag-clicked" params body) = do
             , ("y", JNum 0)
             ])
       ]
+bProc (Procedure name params body) = do
+  this <- newID
+  (bodyID, _) <- withParent (Just this) $ bStmts body
+  protoypeID <- newID
+  tell
+    [ ( this
+      , JObj
+          [ ("opcode", JStr "procedures_definition")
+          , ("next", idJSON bodyID)
+          , ("parent", JNull)
+          , ( "inputs"
+            , JObj [("custom_block", JArr [JNum 1, idJSON $ Just protoypeID])])
+          ])
+    , ( protoypeID
+      , JObj
+          [ ("opcode", JStr "procedures_prototype")
+          , ("next", JNull)
+          , ("parent", idJSON $ Just this)
+          , ("input", JObj [])
+          , ("fields", JObj [])
+          , ("shadow", JBool True)
+          , ( "mutation"
+            , JObj
+                [ ("tagName", JStr "mutation")
+                , ("children", JArr [])
+                , ("proccode", JStr name)
+                , ("argumentids", JStr "[]")
+                , ("argumentnames", JStr "[]")
+                , ("argumentdefaults", JStr "[]")
+                , ("warp", JBool True)
+                ])
+          ])
+    ]
 
 bStmt :: Statement -> Blocky (Maybe UID, Maybe UID)
-bStmt (ProcCall procName args) = undefined
+bStmt (ProcCall procName args) = do
+  exisitingProcs <- asks _envProcs
+  unless (procName `elem` exisitingProcs) $ throwError $ UnknownProc procName
+  this <- newID
+  next <- asks _envNext
+  parent <- asks _envParent
+  tell
+    [ ( this
+      , JObj
+          [ ("opcode", JStr "procedures_call")
+          , ("next", idJSON next)
+          , ("parent", idJSON parent)
+          , ("inputs", JObj [])
+          , ("fields", JObj [])
+          , ( "mutation"
+            , JObj
+                [ ("tagName", JStr "mutation")
+                , ("children", JArr [])
+                , ("proccode", JStr procName)
+                , ("argumentids", JStr "[]")
+                , ("warp", JBool True)
+                ])
+          ])
+    ]
+  return (Just this, Just this)
 bStmt (Do xs) = bStmts xs
 bStmt (IfElse cond true false) = do
   this <- newID
+  parent <- asks _envParent
   withParent (Just this) $ do
     condition <- bExpr cond
     (trueID, _) <- bStmt true
@@ -110,6 +171,7 @@ bStmt (IfElse cond true false) = do
         , JObj
             [ ("opcode", JStr "control_ifthenelse")
             , ("next", idJSON next)
+            , ("parent", idJSON parent)
             , ("CONDITION", condition)
             , ("SUBSTACK", idJSON trueID)
             , ("SUBSTACK2", idJSON falseID)
@@ -118,6 +180,7 @@ bStmt (IfElse cond true false) = do
     return (Just this, Just this)
 bStmt (Repeat times body) = do
   this <- newID
+  parent <- asks _envParent
   withParent (Just this) $ do
     times' <- bExpr times
     (bodyID, _) <- bStmts body
@@ -127,6 +190,7 @@ bStmt (Repeat times body) = do
         , JObj
             [ ("opcode", JStr "control_repeat")
             , ("next", idJSON next)
+            , ("parent", idJSON parent)
             , ("TIMES", times')
             , ("SUBSTACK", idJSON bodyID)
             ])
@@ -134,6 +198,7 @@ bStmt (Repeat times body) = do
     return (Just this, Just this)
 bStmt (Forever body) = do
   this <- newID
+  parent <- asks _envParent
   withParent (Just this) $ do
     (bodyID, _) <- bStmts body
     next <- asks _envNext
@@ -142,12 +207,14 @@ bStmt (Forever body) = do
         , JObj
             [ ("opcode", JStr "control_forever")
             , ("next", idJSON next)
+            , ("parent", idJSON parent)
             , ("SUBSTACK", idJSON bodyID)
             ])
       ]
     return (Just this, Just this)
 bStmt (Until cond body) = do
   this <- newID
+  parent <- asks _envParent
   withParent (Just this) $ do
     condition <- bExpr cond
     (bodyID, _) <- bStmts body
@@ -157,6 +224,7 @@ bStmt (Until cond body) = do
         , JObj
             [ ("opcode", JStr "control_repeat_until")
             , ("next", idJSON next)
+            , ("parent", idJSON parent)
             , ("CODITION", condition)
             , ("SUBSTACK", idJSON bodyID)
             ])
@@ -164,6 +232,7 @@ bStmt (Until cond body) = do
     return (Just this, Just this)
 bStmt (While cond body) = do
   this <- newID
+  parent <- asks _envParent
   withParent (Just this) $ do
     condition <- bExpr cond
     (bodyID, _) <- bStmts body
@@ -173,6 +242,7 @@ bStmt (While cond body) = do
         , JObj
             [ ("opcode", JStr "control_while")
             , ("next", idJSON next)
+            , ("parent", idJSON parent)
             , ("CODITION", condition)
             , ("SUBSTACK", idJSON bodyID)
             ])

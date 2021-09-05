@@ -44,6 +44,7 @@ library
       Utils.Functor
       Utils.Maybe
       Utils.Text
+      Utils.Trans
   other-modules:
       Paths_scratch_compiler
   hs-source-dirs:
