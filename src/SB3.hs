@@ -21,7 +21,9 @@ import Data.Binary (encodeFile)
 import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
 import Lens.Micro ((^.), (^..))
+import Lens.Micro.Extras (view)
 import Mid (Program, targets)
+import Mid.Proc (procedureName)
 import Mid.Sprite (Sprite, costumes, isStage, procedures, spriteName)
 import Utils.Trans (hoistExcept)
 
@@ -55,7 +57,7 @@ spriteJSON spr = do
         Env
           { _envParent = Nothing
           , _envNext = Nothing
-          , _envProcs = []
+          , _envProcs = view procedureName <$> spr ^. procedures
           , _envLocalVars = []
           , _envGlobalVars = []
           , _envLocalLists = []

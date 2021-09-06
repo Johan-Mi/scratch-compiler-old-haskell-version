@@ -3,6 +3,7 @@
 
 module Mid.Proc
   ( Procedure(..)
+  , procedureName
   , mkProc
   , Statement(..)
   , subStmts
@@ -11,7 +12,7 @@ module Mid.Proc
 
 import Data.Functor ((<&>))
 import qualified Data.Text as T
-import Lens.Micro (Traversal')
+import Lens.Micro (Lens', Traversal')
 import LispAST (LispAST(..), asTheFunction)
 import Mid.Error (MidError(..))
 import Mid.Expr (Expr, mkExpr)
@@ -19,6 +20,10 @@ import Mid.Expr (Expr, mkExpr)
 data Procedure =
   Procedure T.Text [Expr] [Statement]
   deriving (Show)
+
+procedureName :: Lens' Procedure T.Text
+procedureName f (Procedure name params body) =
+  (\name' -> Procedure name' params body) <$> f name
 
 mkProc :: LispAST -> Maybe (Either MidError Procedure)
 mkProc = f `asTheFunction` "proc"
