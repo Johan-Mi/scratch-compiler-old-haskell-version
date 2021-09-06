@@ -11,15 +11,14 @@ import Control.Monad (unless)
 import Control.Monad.Except (Except, throwError)
 import Control.Monad.RWS (RWST, evalRWST)
 import Control.Monad.Reader (asks, local)
-import Control.Monad.State (get, modify, put)
 import Control.Monad.Writer (tell)
-import Data.Bifunctor (first)
 import qualified Data.Text as T
 import JSON (JValue(..))
 import Lens.Micro (Lens', set)
 import Mid.Expr (Expr(..), Value(..))
 import Mid.Proc (Procedure(..), Statement(..))
 import Text.Printf (printf)
+import UID (UID, UIDState, idJSON, newID, prependID)
 
 data BlockError
   = InvalidParamsForSpecialProcDef T.Text
@@ -29,27 +28,6 @@ instance Show BlockError where
   show (InvalidParamsForSpecialProcDef procName) =
     printf "invalid arguments for definition of special procedure `%s`" procName
   show (UnknownProc procName) = printf "unknown procedure `%s`" procName
-
-type UID = T.Text
-
-type UIDState = ([UID], Word)
-
-newID :: Blocky UID
-newID = do
-  (prepends, counter) <- get
-  case prepends of
-    [] -> do
-      put ([], counter + 1)
-      return $ T.append "id-" $ T.pack $ show counter
-    (x:xs) -> do
-      put (xs, counter)
-      return x
-
-prependID :: UID -> Blocky ()
-prependID = modify . first . (:)
-
-idJSON :: Maybe UID -> JValue
-idJSON = maybe JNull JStr
 
 data Env =
   Env

@@ -40,6 +40,7 @@ library
       Optimize
       Parser
       SB3
+      UID
       Utils.Either
       Utils.Functor
       Utils.Maybe
