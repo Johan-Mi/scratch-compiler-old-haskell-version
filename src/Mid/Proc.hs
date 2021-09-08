@@ -4,6 +4,7 @@
 module Mid.Proc
   ( Procedure(..)
   , procedureName
+  , procedureParams
   , mkProc
   , Statement(..)
   , subStmts
@@ -24,6 +25,10 @@ data Procedure =
 procedureName :: Lens' Procedure T.Text
 procedureName f (Procedure name params body) =
   (\name' -> Procedure name' params body) <$> f name
+
+procedureParams :: Lens' Procedure [Expr]
+procedureParams f (Procedure name params body) =
+  (\params' -> Procedure name params' body) <$> f params
 
 mkProc :: LispAST -> Maybe (Either MidError Procedure)
 mkProc = f `asTheFunction` "proc"

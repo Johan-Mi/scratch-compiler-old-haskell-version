@@ -58,6 +58,7 @@ spriteJSON spr = do
           { _envParent = Nothing
           , _envNext = Nothing
           , _envProcs = view procedureName <$> spr ^. procedures
+          , _envProcArgs = []
           , _envLocalVars = []
           , _envGlobalVars = []
           , _envLocalLists = []
