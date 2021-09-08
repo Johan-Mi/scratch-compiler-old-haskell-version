@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module SB3
   ( writeSB3File
@@ -15,8 +16,9 @@ import Codec.Archive.Zip
   , toEntry
   )
 import Control.Arrow ((&&&))
-import Control.Monad.Except (ExceptT)
+import Control.Monad.Except (ExceptT, lift)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State (StateT)
 import Data.Binary (encodeFile)
 import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
@@ -24,7 +26,8 @@ import Lens.Micro ((^.), (^..))
 import Lens.Micro.Extras (view)
 import Mid (Program, targets)
 import Mid.Proc (procedureName)
-import Mid.Sprite (Sprite, costumes, isStage, procedures, spriteName)
+import Mid.Sprite (Sprite, costumes, isStage, procedures, spriteName, variables)
+import UID (UIDState, newID, runUIDGenerator)
 import Utils.Trans (hoistExcept)
 
 writeSB3File :: Program -> ExceptT BlockError IO ()
@@ -46,26 +49,35 @@ addFilesToArchiveAt paths arch = foldr addEntryToArchive arch <$> entries
 projectJSON :: Program -> ExceptT BlockError IO (JValue, [Asset])
 projectJSON prg = do
   let meta = JObj [("semver", JStr "3.0.0")]
-  (targets', assetLists) <- unzip <$> traverse spriteJSON (prg ^.. targets)
-  let assets = concat assetLists
-  return (JObj [("meta", meta), ("targets", JArr targets')], assets)
-
-spriteJSON :: Sprite -> ExceptT BlockError IO (JValue, [Asset])
-spriteJSON spr = do
-  costumes' <- liftIO $ traverse (uncurry makeAsset) $ spr ^. costumes
   let env =
         Env
           { _envParent = Nothing
           , _envNext = Nothing
-          , _envProcs = view procedureName <$> spr ^. procedures
+          , _envProcs = []
           , _envProcArgs = []
           , _envLocalVars = []
           , _envGlobalVars = []
           , _envLocalLists = []
           , _envGlobalLists = []
           }
+  (targets', assetLists) <-
+    runUIDGenerator $ unzip <$> traverse (spriteJSON env) (prg ^.. targets)
+  let assets = concat assetLists
+  return (JObj [("meta", meta), ("targets", JArr targets')], assets)
+
+spriteJSON ::
+     Env -> Sprite -> StateT UIDState (ExceptT BlockError IO) (JValue, [Asset])
+spriteJSON env spr = do
+  costumes' <- liftIO $ traverse (uncurry makeAsset) $ spr ^. costumes
+  localVars <- for (spr ^. variables) $ \v -> (v, ) <$> newID
+  let env' =
+        env
+          { _envProcs = view procedureName <$> spr ^. procedures
+          , _envLocalVars = localVars
+          }
   blocks <-
-    hoistExcept $ concat <$> traverse (procToBlocks env) (spr ^. procedures)
+    lift $
+    hoistExcept $ concat <$> traverse (procToBlocks env') (spr ^. procedures)
   return
     ( JObj
         [ ("name", JStr (spr ^. spriteName))

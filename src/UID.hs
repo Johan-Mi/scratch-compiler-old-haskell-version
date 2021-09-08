@@ -7,9 +7,10 @@ module UID
   , newID
   , prependID
   , idJSON
+  , runUIDGenerator
   ) where
 
-import Control.Monad.State (MonadState, get, modify, put)
+import Control.Monad.State (MonadState, StateT, evalStateT, get, modify, put)
 import Data.Bifunctor (first)
 import qualified Data.Text as T
 import JSON (JValue(..))
@@ -34,3 +35,6 @@ prependID = modify . first . (:)
 
 idJSON :: Maybe UID -> JValue
 idJSON = maybe JNull JStr
+
+runUIDGenerator :: Monad m => StateT UIDState m a -> m a
+runUIDGenerator = flip evalStateT ([], 0)

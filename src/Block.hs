@@ -473,7 +473,23 @@ bExpr (FuncCall "<" [lhs, rhs]) = do
       ]
     return $ JStr this
 bExpr (FuncCall "<" args) =
-  throwError $ FuncWrongArgCount "=" (Exactly 2) $ length args
+  throwError $ FuncWrongArgCount "<" (Exactly 2) $ length args
+bExpr (FuncCall "length" [str]) = do
+  this <- newID
+  parent <- asks _envParent
+  withParent (Just this) $ do
+    str' <- bExpr str
+    tell
+      [ ( this
+        , JObj
+            [ ("opcode", JStr "operator_lt")
+            , ("parent", idJSON parent)
+            , ("inputs", JObj [("STRING", str')])
+            ])
+      ]
+    return $ JStr this
+bExpr (FuncCall "length" args) =
+  throwError $ FuncWrongArgCount "length" (Exactly 1) $ length args
 bExpr (FuncCall name args) = error $ T.unpack name
 
 builtinSymbols :: [(T.Text, Blocky JValue)]
