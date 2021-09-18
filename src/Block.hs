@@ -29,6 +29,7 @@ data BlockError
   | FuncWrongArgCount T.Text ArgCount Int
   | UnknownSymbolInExpr T.Text
   | NonSymbolInProcDef T.Text
+  | UnknownFunc T.Text
 
 instance Show BlockError where
   show (InvalidParamsForSpecialProcDef procName) =
@@ -46,6 +47,7 @@ instance Show BlockError where
     printf "unknown symbol `%s` used in an expression" name
   show (NonSymbolInProcDef name) =
     printf "non-symbol in definition of procedure `%s`" name
+  show (UnknownFunc name) = printf "unknown function `%s`" name
 
 data ArgCount
   = Exactly Int
@@ -343,7 +345,7 @@ stackBlock opcode fieldFns procName args
     return (Just this, Just this)
 
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
-bStmts [] = asks $ (Nothing, ) <$> _envParent
+bStmts [] = asks $ (Nothing, ) . _envParent
 bStmts (x:xs) = do
   next <- newID
   (firstStart, firstEnd) <- withNext (Just next) $ bStmt x
@@ -490,7 +492,7 @@ bExpr (FuncCall "length" [str]) = do
     return $ JStr this
 bExpr (FuncCall "length" args) =
   throwError $ FuncWrongArgCount "length" (Exactly 1) $ length args
-bExpr (FuncCall name args) = error $ T.unpack name
+bExpr (FuncCall name _) = throwError $ UnknownFunc name
 
 builtinSymbols :: [(T.Text, Blocky JValue)]
 builtinSymbols =
