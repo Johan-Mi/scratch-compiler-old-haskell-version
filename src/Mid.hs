@@ -7,6 +7,7 @@ module Mid
   ) where
 
 import Data.List (partition)
+import Data.List.NonEmpty (NonEmpty(..))
 import Lens.Micro (Lens', Traversal')
 import LispAST (LispAST)
 import Mid.Error (MidError(..))
@@ -27,8 +28,8 @@ sprites f prg = (\spr -> prg {_sprites = spr}) <$> f (_sprites prg)
 
 targets :: Traversal' Program Sprite
 targets f prg =
-  (\(sc:spr) -> prg {_stage = sc, _sprites = spr}) <$>
-  traverse f (_stage prg : _sprites prg)
+  (\(sc :| spr) -> prg {_stage = sc, _sprites = spr}) <$>
+  traverse f (_stage prg :| _sprites prg)
 
 mkProgram :: [LispAST] -> Either MidError Program
 mkProgram asts = do
