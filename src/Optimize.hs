@@ -2,14 +2,13 @@ module Optimize
   ( optimize
   ) where
 
-import Data.Foldable (asum)
+import Data.Monoid (First(..))
 import Lens.Micro ((%~), each, rewriteOf, transformOf)
 import Mid (Program, targets)
 import Mid.Expr (Expr, subExprs)
 import Mid.Proc (Procedure(..), Statement, stmtExprs, subStmts)
 import Mid.Sprite (Sprite, procedures)
 import Optimizations (exprOptimizations, stmtOptimizations)
-import Utils.Functor (flap)
 
 class Optimizable a where
   optimize :: a -> a
@@ -26,8 +25,8 @@ instance Optimizable Procedure where
 
 instance Optimizable Statement where
   optimize =
-    rewriteOf subStmts (asum . flap stmtOptimizations) .
+    rewriteOf subStmts (getFirst . foldMap (First .) stmtOptimizations) .
     transformOf subStmts (stmtExprs %~ optimize)
 
 instance Optimizable Expr where
-  optimize = rewriteOf subExprs $ asum . flap exprOptimizations
+  optimize = rewriteOf subExprs $ getFirst . foldMap (First .) exprOptimizations

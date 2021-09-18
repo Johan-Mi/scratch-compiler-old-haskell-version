@@ -42,7 +42,6 @@ library
       SB3
       UID
       Utils.Either
-      Utils.Functor
       Utils.Maybe
       Utils.Text
       Utils.Trans
