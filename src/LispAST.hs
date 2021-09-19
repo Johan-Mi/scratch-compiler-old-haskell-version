@@ -6,6 +6,7 @@ module LispAST
   ) where
 
 import Control.Monad (guard)
+import Data.Functor (($>))
 import qualified Data.Text as T
 import Text.Printf (printf)
 
@@ -30,7 +31,7 @@ isTheFunction _ _ = False
 
 asTheFunction :: ([LispAST] -> a) -> T.Text -> LispAST -> Maybe a
 asTheFunction f name (LispNode (LispSym str) args) =
-  guard (str == name) >> return (f args)
+  guard (str == name) $> f args
 asTheFunction _ _ _ = Nothing
 
 getSym :: LispAST -> Maybe T.Text
