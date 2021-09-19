@@ -8,6 +8,7 @@ module Mid.Sprite
   , spriteName
   , costumes
   , variables
+  , lists
   ) where
 
 import Data.Maybe (listToMaybe)
@@ -40,6 +41,9 @@ procedures f spr = (\procs -> spr {_procedures = procs}) <$> f (_procedures spr)
 
 variables :: Lens' Sprite [T.Text]
 variables f spr = (\vars -> spr {_variables = vars}) <$> f (_variables spr)
+
+lists :: Lens' Sprite [T.Text]
+lists f spr = (\lsts -> spr {_lists = lsts}) <$> f (_lists spr)
 
 isStage :: Sprite -> Bool
 isStage = (== "Stage") . _name
