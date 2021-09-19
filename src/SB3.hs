@@ -18,21 +18,31 @@ import Codec.Archive.Zip
 import Control.Arrow ((&&&))
 import Control.Monad.Except (ExceptT, lift)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader (runReader)
 import Control.Monad.State (StateT)
 import Data.Binary (encodeFile)
+import Data.Functor ((<&>))
 import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
 import Lens.Micro ((^.), (^..))
 import Lens.Micro.Extras (view)
-import Mid (Program, targets)
+import Mid (Program, stage, targets)
 import Mid.Proc (procedureName)
-import Mid.Sprite (Sprite, costumes, isStage, procedures, spriteName, variables)
+import Mid.Sprite
+  ( Sprite
+  , costumes
+  , isStage
+  , lists
+  , procedures
+  , spriteName
+  , variables
+  )
 import UID (UIDState, newID, runUIDGenerator)
 import Utils.Trans (hoistExcept)
 
 writeSB3File :: Program -> ExceptT BlockError IO ()
 writeSB3File prg = do
-  (projectObj, assets) <- projectJSON prg
+  (projectObj, assets) <- runUIDGenerator $ projectJSON prg
   let projectEntry = toEntry "project.json" 0 $ showJSON projectObj
   let archive' = addEntryToArchive projectEntry emptyArchive
   archive <-
@@ -46,9 +56,12 @@ addFilesToArchiveAt paths arch = foldr addEntryToArchive arch <$> entries
       for paths $ \(origPath, newPath) ->
         (\e -> e {eRelativePath = newPath}) <$> readEntry [] origPath
 
-projectJSON :: Program -> ExceptT BlockError IO (JValue, [Asset])
+projectJSON ::
+     Program -> StateT UIDState (ExceptT BlockError IO) (JValue, [Asset])
 projectJSON prg = do
   let meta = JObj [("semver", JStr "3.0.0")]
+  globalVars <- for (prg ^. stage . variables) $ \v -> (v, ) <$> newID
+  globalLists <- for (prg ^. stage . lists) $ \v -> (v, ) <$> newID
   let env =
         Env
           { _envParent = Nothing
@@ -56,12 +69,12 @@ projectJSON prg = do
           , _envProcs = []
           , _envProcArgs = []
           , _envLocalVars = []
-          , _envGlobalVars = []
+          , _envGlobalVars = globalVars
           , _envLocalLists = []
-          , _envGlobalLists = []
+          , _envGlobalLists = globalLists
           }
   (targets', assetLists) <-
-    runUIDGenerator $ unzip <$> traverse (spriteJSON env) (prg ^.. targets)
+    unzip <$> traverse (spriteJSON env) (prg ^.. targets)
   let assets = concat assetLists
   return (JObj [("meta", meta), ("targets", JArr targets')], assets)
 
@@ -70,19 +83,23 @@ spriteJSON ::
 spriteJSON env spr = do
   costumes' <- liftIO $ traverse (uncurry makeAsset) $ spr ^. costumes
   localVars <- for (spr ^. variables) $ \v -> (v, ) <$> newID
+  localLists <- for (spr ^. lists) $ \v -> (v, ) <$> newID
   let env' =
         env
           { _envProcs = view procedureName <$> spr ^. procedures
           , _envLocalVars = localVars
+          , _envLocalLists = localLists
           }
   blocks <-
-    lift $
-    hoistExcept $ concat <$> traverse (procToBlocks env') (spr ^. procedures)
+    lift $ hoistExcept $ concat <$>
+    traverse (flip runReader env' . procToBlocks) (spr ^. procedures)
   return
     ( JObj
         [ ("name", JStr (spr ^. spriteName))
         , ("isStage", JBool (isStage spr))
-        , ("variables", JObj [])
+        , ( "variables"
+          , JObj $ localVars <&> \(v, i) -> (i, JArr [JStr v, JNum 0]))
+        , ("lists", JObj $ localLists <&> \(v, i) -> (i, JArr [JStr v, JNum 0]))
         , ("costumes", JArr (assetJSON <$> costumes'))
         , ("currentCostume", JNum 1)
         , ("sounds", JArr [])
