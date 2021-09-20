@@ -167,14 +167,14 @@ bStmt (IfElse cond true false) = do
     tell
       [ ( this
         , JObj
-            [ ("opcode", JStr "control_ifthenelse")
+            [ ("opcode", JStr "control_if_else")
             , ("next", idJSON next)
             , ("parent", idJSON parent)
             , ( "inputs"
               , JObj
                   [ ("CONDITION", condition)
-                  , ("SUBSTACK", idJSON trueID)
-                  , ("SUBSTACK2", idJSON falseID)
+                  , ("SUBSTACK", JArr [JNum 2, idJSON trueID])
+                  , ("SUBSTACK2", JArr [JNum 2, idJSON falseID])
                   ])
             ])
       ]
@@ -192,7 +192,11 @@ bStmt (Repeat times body) = do
             [ ("opcode", JStr "control_repeat")
             , ("next", idJSON next)
             , ("parent", idJSON parent)
-            , ("inputs", JObj [("TIMES", times'), ("SUBSTACK", idJSON bodyID)])
+            , ( "inputs"
+              , JObj
+                  [ ("TIMES", times')
+                  , ("SUBSTACK", JArr [JNum 2, idJSON bodyID])
+                  ])
             ])
       ]
     return (Just this, Just this)
@@ -208,7 +212,7 @@ bStmt (Forever body) = do
             [ ("opcode", JStr "control_forever")
             , ("next", idJSON next)
             , ("parent", idJSON parent)
-            , ("inputs", JObj [("SUBSTACK", idJSON bodyID)])
+            , ("inputs", JObj [("SUBSTACK", JArr [JNum 2, idJSON bodyID])])
             ])
       ]
     return (Just this, Just this)
@@ -226,7 +230,10 @@ bStmt (Until cond body) = do
             , ("next", idJSON next)
             , ("parent", idJSON parent)
             , ( "inputs"
-              , JObj [("CODITION", condition), ("SUBSTACK", idJSON bodyID)])
+              , JObj
+                  [ ("CODITION", condition)
+                  , ("SUBSTACK", JArr [JNum 2, idJSON bodyID])
+                  ])
             ])
       ]
     return (Just this, Just this)
@@ -244,7 +251,10 @@ bStmt (While cond body) = do
             , ("next", idJSON next)
             , ("parent", idJSON parent)
             , ( "inputs"
-              , JObj [("CODITION", condition), ("SUBSTACK", idJSON bodyID)])
+              , JObj
+                  [ ("CODITION", condition)
+                  , ("SUBSTACK", JArr [JNum 2, idJSON bodyID])
+                  ])
             ])
       ]
     return (Just this, Just this)
@@ -271,7 +281,9 @@ bStmt (For var times body) = do
             [ ("opcode", JStr "control_for_each")
             , ("next", idJSON next)
             , ("parent", idJSON parent)
-            , ("inputs", JObj [("VALUE", times'), ("SUBSTACK", idJSON body')])
+            , ( "inputs"
+              , JObj
+                  [("VALUE", times'), ("SUBSTACK", JArr [JNum 2, idJSON body'])])
             , ("fields", JObj [("VARIABLE", JArr [JStr sym, JStr var'])])
             ])
       ]
@@ -615,7 +627,7 @@ bExpr (FuncCall "=" [lhs, rhs]) = do
     tell
       [ ( this
         , JObj
-            [ ("opcode", JStr "operator_equal")
+            [ ("opcode", JStr "operator_equals")
             , ("parent", idJSON parent)
             , ("inputs", JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
             ])
@@ -726,6 +738,23 @@ bExpr (FuncCall "char-at" [str, index]) = do
     return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "char-at" args) =
   throwError $ FuncWrongArgCount "char-at" (Exactly 2) $ length args
+bExpr (FuncCall "mod" [lhs, rhs]) = do
+  this <- newID
+  parent <- asks _envParent
+  withParent (Just this) $ do
+    lhs' <- bExpr lhs
+    rhs' <- bExpr rhs
+    tell
+      [ ( this
+        , JObj
+            [ ("opcode", JStr "operator_mod")
+            , ("parent", idJSON parent)
+            , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
+            ])
+      ]
+    return $ JArr [JNum 1, JStr this]
+bExpr (FuncCall "mod" args) =
+  throwError $ FuncWrongArgCount "mod" (Exactly 2) $ length args
 bExpr (FuncCall "!!" [list, index]) = do
   this <- newID
   parent <- asks _envParent
