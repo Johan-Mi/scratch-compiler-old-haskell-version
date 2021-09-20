@@ -27,6 +27,7 @@ library
   exposed-modules:
       Asset
       Block
+      Block.Env
       Block.Error
       JSON
       Lib

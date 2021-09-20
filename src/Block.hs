@@ -8,11 +8,12 @@ module Block
   , procToBlocks
   ) where
 
+import Block.Env (Env(..), withNext, withParent, withProcArgs)
 import Block.Error (ArgCount(..), BlockError(..))
 import Control.Monad (guard, unless, zipWithM)
 import Control.Monad.Except (Except, throwError)
 import Control.Monad.RWS (RWST, runRWST)
-import Control.Monad.Reader (ReaderT, ask, asks, local)
+import Control.Monad.Reader (ReaderT, ask, asks)
 import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
@@ -22,40 +23,9 @@ import Data.Monoid (First(..))
 import qualified Data.Text as T
 import Data.Traversable (for)
 import JSON (JValue(..))
-import Lens.Micro (Lens', set)
 import Mid.Expr (Expr(..), Value(..))
 import Mid.Proc (Procedure(..), Statement(..))
 import UID (UID, UIDState, idJSON, newID, prependID)
-
-data Env =
-  Env
-    { _envParent :: Maybe UID
-    , _envNext :: Maybe UID
-    , _envProcs :: [T.Text]
-    , _envProcArgs :: [T.Text]
-    , _envLocalVars :: [(T.Text, UID)]
-    , _envGlobalVars :: [(T.Text, UID)]
-    , _envLocalLists :: [(T.Text, UID)]
-    , _envGlobalLists :: [(T.Text, UID)]
-    }
-
-envParent :: Lens' Env (Maybe UID)
-envParent f env = (\x -> env {_envParent = x}) <$> f (_envParent env)
-
-envNext :: Lens' Env (Maybe UID)
-envNext f env = (\x -> env {_envNext = x}) <$> f (_envNext env)
-
-envProcArgs :: Lens' Env [T.Text]
-envProcArgs f env = (\x -> env {_envProcArgs = x}) <$> f (_envProcArgs env)
-
-withParent :: Maybe UID -> Blocky a -> Blocky a
-withParent = local . set envParent
-
-withNext :: Maybe UID -> Blocky a -> Blocky a
-withNext = local . set envNext
-
-withProcArgs :: [T.Text] -> Blocky a -> Blocky a
-withProcArgs = local . set envProcArgs
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
 
