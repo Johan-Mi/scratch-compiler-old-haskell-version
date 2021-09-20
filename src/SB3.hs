@@ -101,7 +101,8 @@ spriteJSON env spr = do
         , ("isStage", JBool (isStage spr))
         , ( "variables"
           , JObj $ localVars <&> \(v, i) -> (i, JArr [JStr v, JNum 0]))
-        , ("lists", JObj $ localLists <&> \(v, i) -> (i, JArr [JStr v, JNum 0]))
+        , ( "lists"
+          , JObj $ localLists <&> \(v, i) -> (i, JArr [JStr v, JArr []]))
         , ("costumes", JArr (assetJSON <$> costumes'))
         , ("currentCostume", JNum 1)
         , ("sounds", JArr [])

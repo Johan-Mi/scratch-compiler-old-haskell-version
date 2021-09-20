@@ -383,7 +383,7 @@ builtinProcs =
                   [ ("opcode", JStr "data_addtolist")
                   , ("next", idJSON next)
                   , ("parent", idJSON parent)
-                  , ("inputs", JObj [("VALUE", value')])
+                  , ("inputs", JObj [("ITEM", value')])
                   , ("fields", JObj [("LIST", list')])
                   ])
             ]
