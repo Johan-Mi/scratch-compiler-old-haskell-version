@@ -508,6 +508,7 @@ stackBlock opcode fieldFns procName args
 
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
 bStmts [] = asks $ (Nothing, ) . _envParent
+bStmts [x] = bStmt x
 bStmts (x:xs) = do
   next <- newID
   (firstStart, firstEnd) <- withNext (Just next) $ bStmt x
@@ -567,7 +568,7 @@ bExpr (FuncCall "+" args) = go args
                 , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                 ])
           ]
-        return $ JStr this
+        return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "-" []) = throwError $ FuncWrongArgCount "-" (AtLeast 1) 0
 bExpr (FuncCall "-" [x]) = bExpr (FuncCall "-" [Lit (VNum 0), x])
 bExpr (FuncCall "-" [lhs, rhs]) = do
@@ -584,7 +585,7 @@ bExpr (FuncCall "-" [lhs, rhs]) = do
             , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
             ])
       ]
-    return $ JStr this
+    return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "-" (x:xs)) = bExpr (FuncCall "-" [x, FuncCall "+" xs])
 bExpr (FuncCall "*" args) = go args
   where
@@ -604,7 +605,7 @@ bExpr (FuncCall "*" args) = go args
                 , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                 ])
           ]
-        return $ JStr this
+        return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "=" [lhs, rhs]) = do
   this <- newID
   parent <- asks _envParent
@@ -619,7 +620,7 @@ bExpr (FuncCall "=" [lhs, rhs]) = do
             , ("inputs", JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
             ])
       ]
-    return $ JStr this
+    return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "=" args) =
   throwError $ FuncWrongArgCount "=" (Exactly 2) $ length args
 bExpr (FuncCall "<" [lhs, rhs]) = do
@@ -636,7 +637,7 @@ bExpr (FuncCall "<" [lhs, rhs]) = do
             , ("inputs", JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
             ])
       ]
-    return $ JStr this
+    return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "<" args) =
   throwError $ FuncWrongArgCount "<" (Exactly 2) $ length args
 bExpr (FuncCall "str-length" [str]) = do
@@ -652,7 +653,7 @@ bExpr (FuncCall "str-length" [str]) = do
             , ("inputs", JObj [("STRING", str')])
             ])
       ]
-    return $ JStr this
+    return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "str-length" args) =
   throwError $ FuncWrongArgCount "str-length" (Exactly 1) $ length args
 bExpr (FuncCall "length" [listName]) = do
@@ -670,7 +671,7 @@ bExpr (FuncCall "length" [listName]) = do
           , ("fields", JObj [("LIST", list')])
           ])
     ]
-  return $ JStr this
+  return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "length" args) =
   throwError $ FuncWrongArgCount "length" (Exactly 1) $ length args
 bExpr (FuncCall "++" args) = go args
@@ -691,7 +692,7 @@ bExpr (FuncCall "++" args) = go args
                 , ("inputs", JObj [("STRING1", lhs'), ("STRING2", rhs')])
                 ])
           ]
-        return $ JStr this
+        return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "not" [arg]) = do
   this <- newID
   parent <- asks _envParent
@@ -705,7 +706,7 @@ bExpr (FuncCall "not" [arg]) = do
             , ("inputs", JObj [("OPERAND", arg')])
             ])
       ]
-    return $ JStr this
+    return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "not" args) =
   throwError $ FuncWrongArgCount "not" (Exactly 1) $ length args
 bExpr (FuncCall "char-at" [str, index]) = do
@@ -722,7 +723,7 @@ bExpr (FuncCall "char-at" [str, index]) = do
             , ("inputs", JObj [("STRING", str'), ("INDEX", index')])
             ])
       ]
-    return $ JStr this
+    return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "char-at" args) =
   throwError $ FuncWrongArgCount "char-at" (Exactly 2) $ length args
 bExpr (FuncCall "!!" [list, index]) = do
@@ -743,7 +744,7 @@ bExpr (FuncCall "!!" [list, index]) = do
             , ("fields", JObj [("LIST", list')])
             ])
       ]
-    return $ JStr this
+    return $ JArr [JNum 1, JStr this]
 bExpr (FuncCall "!!" args) =
   throwError $ FuncWrongArgCount "!!" (Exactly 2) $ length args
 bExpr (FuncCall name _) = throwError $ UnknownFunc name
@@ -761,5 +762,5 @@ builtinSymbols =
                  , ("inputs", JObj [])
                  ])
            ]
-         return $ JStr this)
+         return $ JArr [JNum 1, JStr this])
   ]
