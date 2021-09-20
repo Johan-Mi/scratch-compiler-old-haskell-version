@@ -161,8 +161,8 @@ bStmt (IfElse cond true false) = do
   parent <- asks _envParent
   withParent (Just this) $ do
     condition <- bExpr cond
-    (trueID, _) <- bStmt true
-    (falseID, _) <- bStmt false
+    (trueID, _) <- withNext Nothing $ bStmt true
+    (falseID, _) <- withNext Nothing $ bStmt false
     next <- asks _envNext
     tell
       [ ( this
@@ -184,7 +184,7 @@ bStmt (Repeat times body) = do
   parent <- asks _envParent
   withParent (Just this) $ do
     times' <- bExpr times
-    (bodyID, _) <- bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
       [ ( this
@@ -204,7 +204,7 @@ bStmt (Forever body) = do
   this <- newID
   parent <- asks _envParent
   withParent (Just this) $ do
-    (bodyID, _) <- bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
       [ ( this
@@ -221,7 +221,7 @@ bStmt (Until cond body) = do
   parent <- asks _envParent
   withParent (Just this) $ do
     condition <- bExpr cond
-    (bodyID, _) <- bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
       [ ( this
@@ -242,7 +242,7 @@ bStmt (While cond body) = do
   parent <- asks _envParent
   withParent (Just this) $ do
     condition <- bExpr cond
-    (bodyID, _) <- bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
       [ ( this
@@ -274,7 +274,7 @@ bStmt (For var times body) = do
         Just i -> return i
         Nothing -> throwError $ InvalidArgsForBuiltinProc "for"
     times' <- bExpr times
-    (body', _) <- bStmts body
+    (body', _) <- withNext Nothing $ bStmts body
     tell
       [ ( this
         , JObj
