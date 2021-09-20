@@ -73,6 +73,9 @@ bProc (Procedure name params body) = do
           , ("parent", JNull)
           , ( "inputs"
             , JObj [("custom_block", JArr [JNum 1, idJSON $ Just protoypeID])])
+          , ("topLevel", JBool True)
+          , ("x", JNum 0)
+          , ("y", JNum 0)
           ])
     , ( protoypeID
       , JObj
