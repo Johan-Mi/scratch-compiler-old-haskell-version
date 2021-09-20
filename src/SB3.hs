@@ -16,10 +16,10 @@ import Codec.Archive.Zip
   , toEntry
   )
 import Control.Arrow ((&&&))
-import Control.Monad.Except (ExceptT, lift)
+import Control.Monad.Except (ExceptT)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (runReader)
-import Control.Monad.State (StateT)
+import Control.Monad.Reader (runReaderT)
+import Control.Monad.State (StateT, mapStateT)
 import Data.Binary (encodeFile)
 import Data.Functor ((<&>))
 import Data.Traversable (for)
@@ -91,8 +91,10 @@ spriteJSON env spr = do
           , _envLocalLists = localLists
           }
   blocks <-
-    lift $ hoistExcept $ concat <$>
-    traverse (flip runReader env' . procToBlocks) (spr ^. procedures)
+    concat <$>
+    mapStateT
+      hoistExcept
+      (flip runReaderT env' $ traverse procToBlocks $ spr ^. procedures)
   return
     ( JObj
         [ ("name", JStr (spr ^. spriteName))

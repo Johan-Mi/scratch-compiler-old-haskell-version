@@ -11,8 +11,10 @@ module Block
 import Block.Error (ArgCount(..), BlockError(..))
 import Control.Monad (guard, unless, zipWithM)
 import Control.Monad.Except (Except, throwError)
-import Control.Monad.RWS (RWST, evalRWST)
-import Control.Monad.Reader (Reader, ask, asks, local)
+import Control.Monad.RWS (RWST, runRWST)
+import Control.Monad.Reader (ReaderT, ask, asks, local)
+import Control.Monad.State (StateT, get, put)
+import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromMaybe)
@@ -57,10 +59,15 @@ withProcArgs = local . set envProcArgs
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
 
-procToBlocks :: Procedure -> Reader Env (Except BlockError [(T.Text, JValue)])
+procToBlocks ::
+     Procedure
+  -> ReaderT Env (StateT UIDState (Except BlockError)) [(T.Text, JValue)]
 procToBlocks proc = do
   env <- ask
-  return $ snd <$> evalRWST (bProc proc) env ([], 0)
+  st <- get
+  (_, s, w) <- lift $ lift $ runRWST (bProc proc) env st
+  put s
+  return w
 
 bProc :: Procedure -> Blocky ()
 bProc (Procedure "when-flag-clicked" params body) = do
