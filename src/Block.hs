@@ -18,7 +18,7 @@ import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
 import Data.Functor (($>), (<&>))
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Monoid (First(..))
 import qualified Data.Text as T
 import Data.Traversable (for)
@@ -137,20 +137,34 @@ bStmt (IfElse cond true false) = do
     (trueID, _) <- withNext Nothing $ bStmt true
     (falseID, _) <- withNext Nothing $ bStmt false
     next <- asks _envNext
-    tell
-      [ ( this
-        , JObj
-            [ ("opcode", JStr "control_if_else")
-            , ("next", idJSON next)
-            , ("parent", idJSON parent)
-            , ( "inputs"
-              , JObj
-                  [ ("CONDITION", condition)
-                  , ("SUBSTACK", JArr [JNum 2, idJSON trueID])
-                  , ("SUBSTACK2", JArr [JNum 2, idJSON falseID])
-                  ])
-            ])
-      ]
+    if isNothing falseID
+      then tell
+             [ ( this
+               , JObj
+                   [ ("opcode", JStr "control_if")
+                   , ("next", idJSON next)
+                   , ("parent", idJSON parent)
+                   , ( "inputs"
+                     , JObj
+                         [ ("CONDITION", condition)
+                         , ("SUBSTACK", JArr [JNum 2, idJSON trueID])
+                         ])
+                   ])
+             ]
+      else tell
+             [ ( this
+               , JObj
+                   [ ("opcode", JStr "control_if_else")
+                   , ("next", idJSON next)
+                   , ("parent", idJSON parent)
+                   , ( "inputs"
+                     , JObj
+                         [ ("CONDITION", condition)
+                         , ("SUBSTACK", JArr [JNum 2, idJSON trueID])
+                         , ("SUBSTACK2", JArr [JNum 2, idJSON falseID])
+                         ])
+                   ])
+             ]
     return (Just this, Just this)
 bStmt (Repeat times body) = do
   this <- newID
