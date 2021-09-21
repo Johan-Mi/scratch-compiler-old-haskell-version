@@ -21,8 +21,10 @@ import Data.Functor (($>), (<&>))
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Monoid (First(..))
 import qualified Data.Text as T
+import Data.Text.Lazy (toStrict)
+import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Traversable (for)
-import JSON (JValue(..))
+import JSON (JValue(..), showJSON)
 import Mid.Expr (Expr(..), Value(..))
 import Mid.Proc (Procedure(..), Statement(..))
 import UID (UID, UIDState, idJSON, newID, prependID)
@@ -63,40 +65,48 @@ bProc (Procedure name params body) = do
       Sym sym -> return sym
       _ -> throwError $ NonSymbolInProcDef name
   this <- newID
-  (bodyID, _) <- withParent (Just this) $ withProcArgs params' $ bStmts body
-  protoypeID <- newID
-  tell
-    [ ( this
-      , JObj
-          [ ("opcode", JStr "procedures_definition")
-          , ("next", idJSON bodyID)
-          , ("parent", JNull)
-          , ( "inputs"
-            , JObj [("custom_block", JArr [JNum 1, idJSON $ Just protoypeID])])
-          , ("topLevel", JBool True)
-          , ("x", JNum 0)
-          , ("y", JNum 0)
-          ])
-    , ( protoypeID
-      , JObj
-          [ ("opcode", JStr "procedures_prototype")
-          , ("next", JNull)
-          , ("parent", idJSON $ Just this)
-          , ("input", JObj [])
-          , ("fields", JObj [])
-          , ("shadow", JBool True)
-          , ( "mutation"
-            , JObj
-                [ ("tagName", JStr "mutation")
-                , ("children", JArr [])
-                , ("proccode", JStr name)
-                , ("argumentids", JStr "[]")
-                , ("argumentnames", JStr "[]")
-                , ("argumentdefaults", JStr "[]")
-                , ("warp", JBool True)
-                ])
-          ])
-    ]
+  withProcArgs params' $ do
+    (bodyID, _) <- withParent (Just this) $ bStmts body
+    protoypeID <- newID
+    reporters <- traverse bExpr params
+    let argumentids = toStrict $ decodeUtf8 $ showJSON $ JArr reporters
+    let argumentnames =
+          toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> params'
+    let argumentdefaults =
+          toStrict $ decodeUtf8 $ showJSON $ JArr $ params' $> JStr ""
+    let proccode = T.append name $ T.replicate (length params) " %s"
+    tell
+      [ ( this
+        , JObj
+            [ ("opcode", JStr "procedures_definition")
+            , ("next", idJSON bodyID)
+            , ("parent", JNull)
+            , ( "inputs"
+              , JObj [("custom_block", JArr [JNum 1, idJSON $ Just protoypeID])])
+            , ("topLevel", JBool True)
+            , ("x", JNum 0)
+            , ("y", JNum 0)
+            ])
+      , ( protoypeID
+        , JObj
+            [ ("opcode", JStr "procedures_prototype")
+            , ("next", JNull)
+            , ("parent", idJSON $ Just this)
+            , ("input", JObj [])
+            , ("fields", JObj [])
+            , ("shadow", JBool True)
+            , ( "mutation"
+              , JObj
+                  [ ("tagName", JStr "mutation")
+                  , ("children", JArr [])
+                  , ("proccode", JStr proccode)
+                  , ("argumentids", JStr argumentids)
+                  , ("argumentnames", JStr argumentnames)
+                  , ("argumentdefaults", JStr argumentdefaults)
+                  , ("warp", JBool True)
+                  ])
+            ])
+      ]
 
 bStmt :: Statement -> Blocky (Maybe UID, Maybe UID)
 bStmt (ProcCall procName args) =
