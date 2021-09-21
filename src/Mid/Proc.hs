@@ -73,6 +73,7 @@ specialStatements =
   , ("for", stmtFor)
   , ("when", stmtWhen)
   , ("unless", stmtUnless)
+  , ("cond", stmtCond)
   ]
 
 stmtIfElse :: [LispAST] -> Either MidError Statement
@@ -112,6 +113,12 @@ stmtUnless :: [LispAST] -> Either MidError Statement
 stmtUnless (cond:body) =
   (IfElse <$> mkExpr cond <&> ($ Do [])) <*> (Do <$> traverse mkStatement body)
 stmtUnless _ = Left $ InvalidArgumentsFor "unless"
+
+stmtCond :: [LispAST] -> Either MidError Statement
+stmtCond [] = Right $ Do []
+stmtCond [elseBranch] = mkStatement elseBranch
+stmtCond (condition:body:xs) =
+  IfElse <$> mkExpr condition <*> mkStatement body <*> stmtCond xs
 
 subStmts :: Traversal' Statement Statement
 subStmts _ pc@(ProcCall _ _) = pure pc
