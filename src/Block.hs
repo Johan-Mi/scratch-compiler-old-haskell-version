@@ -579,12 +579,12 @@ builtinFuncs =
     , \case
         [] -> throwError $ FuncWrongArgCount "-" (AtLeast 1) 0
         [x] -> bExpr (FuncCall "-" [Lit (VNum 0), x])
-        [lhs, rhs] -> do
+        (lhs:rhs) -> do
           this <- newID
           parent <- asks _envParent
           withParent (Just this) $ do
             lhs' <- bExpr lhs
-            rhs' <- bExpr rhs
+            rhs' <- bExpr $ FuncCall "+" rhs
             tell
               [ ( this
                 , JObj
@@ -593,8 +593,7 @@ builtinFuncs =
                     , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                     ])
               ]
-            return $ JArr [JNum 1, JStr this]
-        (x:xs) -> bExpr (FuncCall "-" [x, FuncCall "+" xs]))
+            return $ JArr [JNum 1, JStr this])
   , ( "*"
     , let go [] = bExpr $ Lit $ VNum 0
           go [x] = bExpr x
@@ -614,6 +613,24 @@ builtinFuncs =
                 ]
               return $ JArr [JNum 1, JStr this]
        in go)
+  , ( "/"
+    , \case
+        (lhs:rhs@(_:_)) -> do
+          this <- newID
+          parent <- asks _envParent
+          withParent (Just this) $ do
+            lhs' <- bExpr lhs
+            rhs' <- bExpr $ FuncCall "*" rhs
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "operator_divide")
+                    , ("parent", idJSON parent)
+                    , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
+                    ])
+              ]
+            return $ JArr [JNum 1, JStr this]
+        args -> throwError $ FuncWrongArgCount "/" (AtLeast 2) $ length args)
   , ( "++"
     , let go [] = bExpr $ Lit $ VStr ""
           go [x] = bExpr x
@@ -633,60 +650,13 @@ builtinFuncs =
                 ]
               return $ JArr [JNum 1, JStr this]
        in go)
-  , ( "="
-    , \case
-        [lhs, rhs] -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
-            lhs' <- bExpr lhs
-            rhs' <- bExpr rhs
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "operator_equals")
-                    , ("parent", idJSON parent)
-                    , ("inputs", JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
-                    ])
-              ]
-            return $ JArr [JNum 1, JStr this]
-        args -> throwError $ FuncWrongArgCount "=" (Exactly 2) $ length args)
-  , ( "<"
-    , \case
-        [lhs, rhs] -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
-            lhs' <- bExpr lhs
-            rhs' <- bExpr rhs
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "operator_lt")
-                    , ("parent", idJSON parent)
-                    , ("inputs", JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
-                    ])
-              ]
-            return $ JArr [JNum 1, JStr this]
-        args -> throwError $ FuncWrongArgCount "<" (Exactly 2) $ length args)
-  , ( "str-length"
-    , \case
-        [str] -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
-            str' <- bExpr str
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "operator_length")
-                    , ("parent", idJSON parent)
-                    , ("inputs", JObj [("STRING", str')])
-                    ])
-              ]
-            return $ JArr [JNum 1, JStr this]
-        args ->
-          throwError $ FuncWrongArgCount "str-length" (Exactly 1) $ length args)
+  , simpleOperator "=" "operator_equals" ["OPERAND1", "OPERAND2"]
+  , simpleOperator "<" "operator_lt" ["OPERAND1", "OPERAND2"]
+  , simpleOperator ">" "operator_gt" ["OPERAND1", "OPERAND2"]
+  , simpleOperator "str-length" "operator_length" ["STRING"]
+  , simpleOperator "not" "operator_not" ["OPERAND"]
+  , simpleOperator "char-at" "operator_letter_of" ["STRING", "INDEX"]
+  , simpleOperator "mod" "operator_mod" ["NUM1", "NUM2"]
   , ( "length"
     , \case
         [listName] -> do
@@ -707,61 +677,30 @@ builtinFuncs =
           return $ JArr [JNum 1, JStr this]
         args ->
           throwError $ FuncWrongArgCount "length" (Exactly 1) $ length args)
-  , ( "not"
-    , \case
-        [arg] -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
-            arg' <- bExpr arg
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "operator_not")
-                    , ("parent", idJSON parent)
-                    , ("inputs", JObj [("OPERAND", arg')])
-                    ])
-              ]
-            return $ JArr [JNum 1, JStr this]
-        args -> throwError $ FuncWrongArgCount "not" (Exactly 1) $ length args)
-  , ( "char-at"
-    , \case
-        [str, index] -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
-            str' <- bExpr str
-            index' <- bExpr index
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "operator_letter_of")
-                    , ("parent", idJSON parent)
-                    , ("inputs", JObj [("STRING", str'), ("INDEX", index')])
-                    ])
-              ]
-            return $ JArr [JNum 1, JStr this]
-        args ->
-          throwError $ FuncWrongArgCount "char-at" (Exactly 2) $ length args)
-  , ( "mod"
-    , \case
-        [lhs, rhs] -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
-            lhs' <- bExpr lhs
-            rhs' <- bExpr rhs
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "operator_mod")
-                    , ("parent", idJSON parent)
-                    , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
-                    ])
-              ]
-            return $ JArr [JNum 1, JStr this]
-        args -> throwError $ FuncWrongArgCount "mod" (Exactly 2) $ length args)
   ]
+  where
+    simpleOperator ::
+         T.Text -> T.Text -> [T.Text] -> (T.Text, [Expr] -> Blocky JValue)
+    simpleOperator name opcode inputs = (name, go)
+      where
+        go args
+          | length args /= length inputs =
+            throwError $
+            FuncWrongArgCount name (Exactly $ length inputs) $ length args
+          | otherwise = do
+            this <- newID
+            parent <- asks _envParent
+            withParent (Just this) $ do
+              args' <- traverse bExpr args
+              tell
+                [ ( this
+                  , JObj
+                      [ ("opcode", JStr opcode)
+                      , ("parent", idJSON parent)
+                      , ("inputs", JObj $ zip inputs args')
+                      ])
+                ]
+              return $ JArr [JNum 1, JStr this]
 
 builtinSymbols :: [(T.Text, Blocky JValue)]
 builtinSymbols =
