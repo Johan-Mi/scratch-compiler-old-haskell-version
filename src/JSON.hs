@@ -15,7 +15,8 @@ import Text.Printf (printf)
 data JValue
   = JNull
   | JBool Bool
-  | JNum Double
+  | JNum Int
+  | JDec Double
   | JStr T.Text
   | JArr [JValue]
   | JObj [(T.Text, JValue)]
@@ -29,7 +30,8 @@ showJSON = B.toLazyByteString . go
     go JNull = "null"
     go (JBool True) = "true"
     go (JBool False) = "false"
-    go (JNum num) = B.doubleDec num
+    go (JNum num) = B.intDec num
+    go (JDec dec) = B.doubleDec dec
     go (JStr str) = fmtString str
     go (JArr arr) =
       B.charUtf8 '[' <>
