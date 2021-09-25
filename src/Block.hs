@@ -17,7 +17,6 @@ import Control.Monad.Reader (ReaderT, ask, asks)
 import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
-import Data.Foldable (traverse_)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, fromMaybe, isNothing)
 import Data.Monoid (First(..))
@@ -72,9 +71,7 @@ bProc (Procedure name params body) = do
       exisitingProcs <- asks _envProcs
       protoypeID <- newID
       let paramIDs = snd <$> fromJust (lookup name exisitingProcs)
-      reporterIDs <- traverse (const newID) paramIDs
-      traverse_ prependID reporterIDs
-      _ <- withParent (Just protoypeID) $ traverse bExpr params
+      reporters <- withParent (Just protoypeID) $ traverse bExpr params
       let argumentids =
             toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
       let argumentnames =
@@ -100,12 +97,7 @@ bProc (Procedure name params body) = do
               [ ("opcode", JStr "procedures_prototype")
               , ("next", JNull)
               , ("parent", idJSON $ Just this)
-              , ( "inputs"
-                , JObj $
-                  zipWith
-                    (\i j -> (i, JArr [JNum 1, JStr j]))
-                    paramIDs
-                    reporterIDs)
+              , ("inputs", JObj $ zip paramIDs reporters)
               , ("fields", JObj [])
               , ("shadow", JBool True)
               , ( "mutation"
@@ -311,8 +303,8 @@ builtinProcs =
    , ("set-costume", "looks_switchcostumeto", [val "COSTUME"])
    , ("show", "looks_show", [])
    , ("hide", "looks_hide", [])
-   , ("change-x", "motion_changexby", [val "X"])
-   , ("change-y", "motion_changexby", [val "Y"])
+   , ("change-x", "motion_changexby", [val "DX"])
+   , ("change-y", "motion_changeyby", [val "DY"])
    , ("set-x", "motion_setx", [val "X"])
    , ("set-y", "motion_sety", [val "Y"])
    , ("send-broadcast-sync", "event_broadcastandwait", [val "BROADCAST_INPUT"])
@@ -532,7 +524,9 @@ bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
 bStmts [] = asks $ (Nothing, ) . _envParent
 bStmts [x] = bStmt x
 bStmts (x:xs) = do
+  this <- newID
   next <- newID
+  prependID this
   (firstStart, firstEnd) <- withNext (Just next) $ bStmt x
   prependID next
   (_, restEnd) <- withParent firstEnd $ bStmts xs
@@ -698,7 +692,7 @@ builtinFuncs =
   , simpleOperator ">" "operator_gt" ["OPERAND1", "OPERAND2"]
   , simpleOperator "str-length" "operator_length" ["STRING"]
   , simpleOperator "not" "operator_not" ["OPERAND"]
-  , simpleOperator "char-at" "operator_letter_of" ["STRING", "INDEX"]
+  , simpleOperator "char-at" "operator_letter_of" ["STRING", "LETTER"]
   , simpleOperator "mod" "operator_mod" ["NUM1", "NUM2"]
   , ( "length"
     , \case
