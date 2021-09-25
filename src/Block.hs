@@ -17,8 +17,9 @@ import Control.Monad.Reader (ReaderT, ask, asks)
 import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
+import Data.Foldable (traverse_)
 import Data.Functor (($>), (<&>))
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromJust, fromMaybe, isNothing)
 import Data.Monoid (First(..))
 import qualified Data.Text as T
 import Data.Text.Lazy (toStrict)
@@ -65,48 +66,60 @@ bProc (Procedure name params body) = do
       Sym sym -> return sym
       _ -> throwError $ NonSymbolInProcDef name
   this <- newID
-  withProcArgs params' $ do
-    (bodyID, _) <- withParent (Just this) $ bStmts body
-    protoypeID <- newID
-    reporters <- traverse bExpr params
-    let argumentids = toStrict $ decodeUtf8 $ showJSON $ JArr reporters
-    let argumentnames =
-          toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> params'
-    let argumentdefaults =
-          toStrict $ decodeUtf8 $ showJSON $ JArr $ params' $> JStr ""
-    let proccode = T.append name $ T.replicate (length params) " %s"
-    tell
-      [ ( this
-        , JObj
-            [ ("opcode", JStr "procedures_definition")
-            , ("next", idJSON bodyID)
-            , ("parent", JNull)
-            , ( "inputs"
-              , JObj [("custom_block", JArr [JNum 1, idJSON $ Just protoypeID])])
-            , ("topLevel", JBool True)
-            , ("x", JNum 0)
-            , ("y", JNum 0)
-            ])
-      , ( protoypeID
-        , JObj
-            [ ("opcode", JStr "procedures_prototype")
-            , ("next", JNull)
-            , ("parent", idJSON $ Just this)
-            , ("input", JObj [])
-            , ("fields", JObj [])
-            , ("shadow", JBool True)
-            , ( "mutation"
-              , JObj
-                  [ ("tagName", JStr "mutation")
-                  , ("children", JArr [])
-                  , ("proccode", JStr proccode)
-                  , ("argumentids", JStr argumentids)
-                  , ("argumentnames", JStr argumentnames)
-                  , ("argumentdefaults", JStr argumentdefaults)
-                  , ("warp", JBool True)
-                  ])
-            ])
-      ]
+  withParent (Just this) $
+    withProcArgs params' $ do
+      (bodyID, _) <- bStmts body
+      exisitingProcs <- asks _envProcs
+      protoypeID <- newID
+      let paramIDs = snd <$> fromJust (lookup name exisitingProcs)
+      reporterIDs <- traverse (const newID) paramIDs
+      traverse_ prependID reporterIDs
+      _ <- withParent (Just protoypeID) $ traverse bExpr params
+      let argumentids =
+            toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
+      let argumentnames =
+            toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> params'
+      let argumentdefaults =
+            toStrict $ decodeUtf8 $ showJSON $ JArr $ params' $> JStr ""
+      let proccode = T.append name $ T.replicate (length params) " %s"
+      tell
+        [ ( this
+          , JObj
+              [ ("opcode", JStr "procedures_definition")
+              , ("next", idJSON bodyID)
+              , ("parent", JNull)
+              , ( "inputs"
+                , JObj
+                    [("custom_block", JArr [JNum 1, idJSON $ Just protoypeID])])
+              , ("topLevel", JBool True)
+              , ("x", JNum 0)
+              , ("y", JNum 0)
+              ])
+        , ( protoypeID
+          , JObj
+              [ ("opcode", JStr "procedures_prototype")
+              , ("next", JNull)
+              , ("parent", idJSON $ Just this)
+              , ( "inputs"
+                , JObj $
+                  zipWith
+                    (\i j -> (i, JArr [JNum 1, JStr j]))
+                    paramIDs
+                    reporterIDs)
+              , ("fields", JObj [])
+              , ("shadow", JBool True)
+              , ( "mutation"
+                , JObj
+                    [ ("tagName", JStr "mutation")
+                    , ("children", JArr [])
+                    , ("proccode", JStr proccode)
+                    , ("argumentids", JStr argumentids)
+                    , ("argumentnames", JStr argumentnames)
+                    , ("argumentdefaults", JStr argumentdefaults)
+                    , ("warp", JStr "true")
+                    ])
+              ])
+        ]
 
 bStmt :: Statement -> Blocky (Maybe UID, Maybe UID)
 bStmt (ProcCall procName args) =
@@ -114,26 +127,32 @@ bStmt (ProcCall procName args) =
     Just fn -> fn args
     Nothing -> do
       exisitingProcs <- asks _envProcs
-      unless (procName `elem` exisitingProcs) $
-        throwError $ UnknownProc procName
+      paramIDs <-
+        maybe (throwError $ UnknownProc procName) (return . fmap snd) $
+        lookup procName exisitingProcs
       this <- newID
       next <- asks _envNext
       parent <- asks _envParent
+      args' <- withParent (Just this) $ traverse bExpr args
+      let inputs = zip paramIDs args'
+      let proccode = T.append procName $ T.replicate (length args) " %s"
+      let argumentids =
+            toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
       tell
         [ ( this
           , JObj
               [ ("opcode", JStr "procedures_call")
               , ("next", idJSON next)
               , ("parent", idJSON parent)
-              , ("inputs", JObj [])
+              , ("inputs", JObj inputs)
               , ("fields", JObj [])
               , ( "mutation"
                 , JObj
                     [ ("tagName", JStr "mutation")
                     , ("children", JArr [])
-                    , ("proccode", JStr procName)
-                    , ("argumentids", JStr "[]")
-                    , ("warp", JBool True)
+                    , ("proccode", JStr proccode)
+                    , ("argumentids", JStr argumentids)
+                    , ("warp", JStr "true")
                     ])
               ])
         ]
@@ -520,7 +539,7 @@ bStmts (x:xs) = do
   return (firstStart, restEnd)
 
 bExpr :: Expr -> Blocky JValue
-bExpr (Lit (VNum num)) = return $ JArr [JNum 1, JArr [JNum 4, JNum num]]
+bExpr (Lit (VNum num)) = return $ JArr [JNum 1, JArr [JNum 4, JDec num]]
 bExpr (Lit (VStr str)) = return $ JArr [JNum 1, JArr [JNum 10, JStr str]]
 bExpr (Lit (VBool True)) = return $ JArr [JNum 1, JArr [JNum 10, JStr "true"]]
 bExpr (Lit (VBool False)) = return $ JArr [JNum 1, JArr [JNum 10, JStr "false"]]

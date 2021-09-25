@@ -25,9 +25,9 @@ import Data.Functor ((<&>))
 import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
 import Lens.Micro ((^.), (^..))
-import Lens.Micro.Extras (view)
 import Mid (Program, stage, targets)
-import Mid.Proc (procedureName)
+import Mid.Expr (Expr(..))
+import Mid.Proc (procedureName, procedureParams)
 import Mid.Sprite
   ( Sprite
   , costumes
@@ -84,9 +84,13 @@ spriteJSON env spr = do
   costumes' <- liftIO $ traverse (uncurry makeAsset) $ spr ^. costumes
   localVars <- for (spr ^. variables) $ \v -> (v, ) <$> newID
   localLists <- for (spr ^. lists) $ \v -> (v, ) <$> newID
+  procs <-
+    for (spr ^. procedures) $ \p -> do
+      params <- for [s | Sym s <- p ^. procedureParams] $ \v -> (v, ) <$> newID
+      return (p ^. procedureName, params)
   let env' =
         env
-          { _envProcs = view procedureName <$> spr ^. procedures
+          { _envProcs = procs
           , _envLocalVars = localVars
           , _envLocalLists = localLists
           }
