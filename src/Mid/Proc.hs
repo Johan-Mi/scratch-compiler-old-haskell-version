@@ -110,8 +110,10 @@ stmtWhen (cond:body) =
 stmtWhen _ = Left $ InvalidArgumentsFor "when"
 
 stmtUnless :: [LispAST] -> Either MidError Statement
-stmtUnless (cond:body) =
-  (IfElse <$> mkExpr cond <&> ($ Do [])) <*> (Do <$> traverse mkStatement body)
+stmtUnless (cond:body) = do
+  cond' <- mkExpr $ LispNode (LispSym "not") [cond]
+  body' <- traverse mkStatement body
+  return $ IfElse cond' (Do body') (Do [])
 stmtUnless _ = Left $ InvalidArgumentsFor "unless"
 
 stmtCond :: [LispAST] -> Either MidError Statement
