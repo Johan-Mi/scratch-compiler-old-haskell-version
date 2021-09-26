@@ -25,7 +25,7 @@ import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
-import Mid.Expr (Expr(..), Value(..))
+import Mid.Expr (Expr(..), Value(..), toString)
 import Mid.Proc (Procedure(..), Statement(..))
 import UID (UID, UIDState, idJSON, newID, prependID)
 
@@ -351,21 +351,21 @@ builtinProcs =
         _ -> throwError $ InvalidArgsForBuiltinProc "+=")
   , ( "replace"
     , \case
-        [Sym listName, index, value] -> do
+        [Sym listName, index, item] -> do
           this <- newID
           next <- asks _envNext
           parent <- asks _envParent
           list' <- listField listName
           withParent (Just this) $ do
             index' <- bExpr index
-            value' <- bExpr value
+            item' <- bExpr item
             tell
               [ ( this
                 , JObj
                     [ ("opcode", JStr "data_replaceitemoflist")
                     , ("next", idJSON next)
                     , ("parent", idJSON parent)
-                    , ("inputs", JObj [("INDEX", index'), ("VALUE", value')])
+                    , ("inputs", JObj [("INDEX", index'), ("ITEM", item')])
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
@@ -533,10 +533,7 @@ bStmts (x:xs) = do
   return (firstStart, restEnd)
 
 bExpr :: Expr -> Blocky JValue
-bExpr (Lit (VNum num)) = return $ JArr [JNum 1, JArr [JNum 4, JDec num]]
-bExpr (Lit (VStr str)) = return $ JArr [JNum 1, JArr [JNum 10, JStr str]]
-bExpr (Lit (VBool True)) = return $ JArr [JNum 1, JArr [JNum 10, JStr "true"]]
-bExpr (Lit (VBool False)) = return $ JArr [JNum 1, JArr [JNum 10, JStr "false"]]
+bExpr (Lit lit) = return $ JArr [JNum 1, JArr [JNum 10, JStr $ toString lit]]
 bExpr (Sym sym) = do
   env <- ask
   let procArgs = _envProcArgs env
