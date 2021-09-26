@@ -31,6 +31,21 @@ import UID (UID, UIDState, idJSON, newID, prependID)
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
 
+data Reporter
+  = Shadow JValue
+  | NonShadow JValue
+
+noShadow :: Reporter -> JValue
+noShadow (Shadow jv) = JArr [JNum 1, jv]
+noShadow (NonShadow jv) = JArr [JNum 2, jv]
+
+withShadow :: JValue -> Reporter -> JValue
+withShadow _ (Shadow jv) = JArr [JNum 1, jv]
+withShadow obscured (NonShadow jv) = JArr [JNum 3, jv, obscured]
+
+emptyShadow :: Reporter -> JValue
+emptyShadow = withShadow $ JArr [JNum 10, JStr ""]
+
 procToBlocks ::
      Procedure
   -> ReaderT Env (StateT UIDState (Except BlockError)) [(T.Text, JValue)]
@@ -71,7 +86,8 @@ bProc (Procedure name params body) = do
       exisitingProcs <- asks _envProcs
       protoypeID <- newID
       let paramIDs = snd <$> fromJust (lookup name exisitingProcs)
-      reporters <- withParent (Just protoypeID) $ traverse bExpr params
+      reporters <-
+        fmap noShadow <$> withParent (Just protoypeID) (traverse bExpr params)
       let argumentids =
             toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
       let argumentnames =
@@ -125,7 +141,7 @@ bStmt (ProcCall procName args) =
       this <- newID
       next <- asks _envNext
       parent <- asks _envParent
-      args' <- withParent (Just this) $ traverse bExpr args
+      args' <- fmap emptyShadow <$> withParent (Just this) (traverse bExpr args)
       let inputs = zip paramIDs args'
       let proccode = T.append procName $ T.replicate (length args) " %s"
       let argumentids =
@@ -154,7 +170,7 @@ bStmt (IfElse cond true false) = do
   this <- newID
   parent <- asks _envParent
   withParent (Just this) $ do
-    condition <- bExpr cond
+    condition <- noShadow <$> bExpr cond
     (trueID, _) <- withNext Nothing $ bStmt true
     (falseID, _) <- withNext Nothing $ bStmt false
     next <- asks _envNext
@@ -191,7 +207,7 @@ bStmt (Repeat times body) = do
   this <- newID
   parent <- asks _envParent
   withParent (Just this) $ do
-    times' <- bExpr times
+    times' <- emptyShadow <$> bExpr times
     (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
@@ -228,7 +244,7 @@ bStmt (Until cond body) = do
   this <- newID
   parent <- asks _envParent
   withParent (Just this) $ do
-    condition <- bExpr cond
+    condition <- noShadow <$> bExpr cond
     (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
@@ -249,7 +265,7 @@ bStmt (While cond body) = do
   this <- newID
   parent <- asks _envParent
   withParent (Just this) $ do
-    condition <- bExpr cond
+    condition <- noShadow <$> bExpr cond
     (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
@@ -275,7 +291,7 @@ bStmt (For var times body) = do
       case var of
         Sym sym -> varField sym
         _ -> throwError $ InvalidArgsForBuiltinProc "for"
-    times' <- bExpr times
+    times' <- emptyShadow <$> bExpr times
     (body', _) <- withNext Nothing $ bStmts body
     tell
       [ ( this
@@ -316,7 +332,7 @@ builtinProcs =
           next <- asks _envNext
           parent <- asks _envParent
           variable' <- varField varName
-          value' <- withParent (Just this) $ bExpr value
+          value' <- emptyShadow <$> withParent (Just this) (bExpr value)
           tell
             [ ( this
               , JObj
@@ -336,7 +352,7 @@ builtinProcs =
           next <- asks _envNext
           parent <- asks _envParent
           variable' <- varField varName
-          value' <- withParent (Just this) $ bExpr value
+          value' <- emptyShadow <$> withParent (Just this) (bExpr value)
           tell
             [ ( this
               , JObj
@@ -357,8 +373,8 @@ builtinProcs =
           parent <- asks _envParent
           list' <- listField listName
           withParent (Just this) $ do
-            index' <- bExpr index
-            item' <- bExpr item
+            index' <- emptyShadow <$> withParent (Just this) (bExpr index)
+            item' <- emptyShadow <$> bExpr item
             tell
               [ ( this
                 , JObj
@@ -378,7 +394,7 @@ builtinProcs =
           next <- asks _envNext
           parent <- asks _envParent
           list' <- listField listName
-          value' <- withParent (Just this) $ bExpr value
+          value' <- emptyShadow <$> withParent (Just this) (bExpr value)
           tell
             [ ( this
               , JObj
@@ -398,7 +414,7 @@ builtinProcs =
           next <- asks _envNext
           parent <- asks _envParent
           list' <- listField listName
-          index' <- withParent (Just this) $ bExpr index
+          index' <- emptyShadow <$> withParent (Just this) (bExpr index)
           tell
             [ ( this
               , JObj
@@ -473,7 +489,7 @@ builtinProcs =
         _ -> throwError $ InvalidArgsForBuiltinProc "stop-this-script")
   ]
   where
-    val = (, bExpr)
+    val = (, fmap emptyShadow . bExpr)
 
 varField :: T.Text -> Blocky JValue
 varField name = do
@@ -532,8 +548,8 @@ bStmts (x:xs) = do
   (_, restEnd) <- withParent firstEnd $ bStmts xs
   return (firstStart, restEnd)
 
-bExpr :: Expr -> Blocky JValue
-bExpr (Lit lit) = return $ JArr [JNum 1, JArr [JNum 10, JStr $ toString lit]]
+bExpr :: Expr -> Blocky Reporter
+bExpr (Lit lit) = return $ Shadow $ JArr [JNum 10, JStr $ toString lit]
 bExpr (Sym sym) = do
   env <- ask
   let procArgs = _envProcArgs env
@@ -551,13 +567,13 @@ bExpr (Sym sym) = do
                   , ("fields", JObj [("VALUE", JArr [JStr sym, JNull])])
                   ])
             ]
-          return $ JArr [JNum 1, JStr this]
+          return $ NonShadow $ JStr this
       theVar =
         lookup sym vars <&> \i ->
-          return $ JArr [JNum 1, JArr [JNum 12, JStr sym, JStr i]]
+          return $ NonShadow $ JArr [JNum 12, JStr sym, JStr i]
       theList =
         lookup sym lists <&> \i ->
-          return $ JArr [JNum 1, JArr [JNum 13, JStr sym, JStr i]]
+          return $ NonShadow $ JArr [JNum 13, JStr sym, JStr i]
       theBuiltin = lookup sym builtinSymbols
   fromMaybe err $
     getFirst $ foldMap First [theProcArg, theVar, theList, theBuiltin]
@@ -566,7 +582,7 @@ bExpr (Sym sym) = do
 bExpr (FuncCall name args) =
   maybe (throwError $ UnknownFunc name) ($ args) $ lookup name builtinFuncs
 
-builtinFuncs :: [(T.Text, [Expr] -> Blocky JValue)]
+builtinFuncs :: [(T.Text, [Expr] -> Blocky Reporter)]
 builtinFuncs =
   [ ( "!!"
     , \case
@@ -578,7 +594,7 @@ builtinFuncs =
               case list of
                 Sym sym -> listField sym
                 _ -> throwError $ InvalidArgsForBuiltinFunc "!!"
-            index' <- bExpr index
+            index' <- emptyShadow <$> bExpr index
             tell
               [ ( this
                 , JObj
@@ -588,7 +604,7 @@ builtinFuncs =
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
-            return $ JArr [JNum 1, JStr this]
+            return $ NonShadow $ JStr this
         args -> throwError $ FuncWrongArgCount "!!" (Exactly 2) $ length args)
   , ( "+"
     , let go [] = bExpr $ Lit $ VNum 0
@@ -597,8 +613,8 @@ builtinFuncs =
             this <- newID
             parent <- asks _envParent
             withParent (Just this) $ do
-              lhs' <- bExpr lhs
-              rhs' <- go rhs
+              lhs' <- emptyShadow <$> bExpr lhs
+              rhs' <- emptyShadow <$> go rhs
               tell
                 [ ( this
                   , JObj
@@ -607,7 +623,7 @@ builtinFuncs =
                       , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                       ])
                 ]
-              return $ JArr [JNum 1, JStr this]
+              return $ NonShadow $ JStr this
        in go)
   , ( "-"
     , \case
@@ -617,8 +633,8 @@ builtinFuncs =
           this <- newID
           parent <- asks _envParent
           withParent (Just this) $ do
-            lhs' <- bExpr lhs
-            rhs' <- bExpr $ FuncCall "+" rhs
+            lhs' <- emptyShadow <$> bExpr lhs
+            rhs' <- emptyShadow <$> bExpr (FuncCall "+" rhs)
             tell
               [ ( this
                 , JObj
@@ -627,7 +643,7 @@ builtinFuncs =
                     , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                     ])
               ]
-            return $ JArr [JNum 1, JStr this])
+            return $ NonShadow $ JStr this)
   , ( "*"
     , let go [] = bExpr $ Lit $ VNum 0
           go [x] = bExpr x
@@ -635,8 +651,8 @@ builtinFuncs =
             this <- newID
             parent <- asks _envParent
             withParent (Just this) $ do
-              lhs' <- bExpr lhs
-              rhs' <- go rhs
+              lhs' <- emptyShadow <$> bExpr lhs
+              rhs' <- emptyShadow <$> go rhs
               tell
                 [ ( this
                   , JObj
@@ -645,7 +661,7 @@ builtinFuncs =
                       , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                       ])
                 ]
-              return $ JArr [JNum 1, JStr this]
+              return $ NonShadow $ JStr this
        in go)
   , ( "/"
     , \case
@@ -653,8 +669,8 @@ builtinFuncs =
           this <- newID
           parent <- asks _envParent
           withParent (Just this) $ do
-            lhs' <- bExpr lhs
-            rhs' <- bExpr $ FuncCall "*" rhs
+            lhs' <- emptyShadow <$> bExpr lhs
+            rhs' <- emptyShadow <$> bExpr (FuncCall "*" rhs)
             tell
               [ ( this
                 , JObj
@@ -663,7 +679,7 @@ builtinFuncs =
                     , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                     ])
               ]
-            return $ JArr [JNum 1, JStr this]
+            return $ NonShadow $ JStr this
         args -> throwError $ FuncWrongArgCount "/" (AtLeast 2) $ length args)
   , ( "++"
     , let go [] = bExpr $ Lit $ VStr ""
@@ -672,8 +688,8 @@ builtinFuncs =
             this <- newID
             parent <- asks _envParent
             withParent (Just this) $ do
-              lhs' <- bExpr lhs
-              rhs' <- go rhs
+              lhs' <- emptyShadow <$> bExpr lhs
+              rhs' <- emptyShadow <$> go rhs
               tell
                 [ ( this
                   , JObj
@@ -682,7 +698,7 @@ builtinFuncs =
                       , ("inputs", JObj [("STRING1", lhs'), ("STRING2", rhs')])
                       ])
                 ]
-              return $ JArr [JNum 1, JStr this]
+              return $ NonShadow $ JStr this
        in go)
   , simpleOperator "=" "operator_equals" ["OPERAND1", "OPERAND2"]
   , simpleOperator "<" "operator_lt" ["OPERAND1", "OPERAND2"]
@@ -708,13 +724,13 @@ builtinFuncs =
                   , ("fields", JObj [("LIST", list')])
                   ])
             ]
-          return $ JArr [JNum 1, JStr this]
+          return $ NonShadow $ JStr this
         args ->
           throwError $ FuncWrongArgCount "length" (Exactly 1) $ length args)
   ]
   where
     simpleOperator ::
-         T.Text -> T.Text -> [T.Text] -> (T.Text, [Expr] -> Blocky JValue)
+         T.Text -> T.Text -> [T.Text] -> (T.Text, [Expr] -> Blocky Reporter)
     simpleOperator name opcode inputs = (name, go)
       where
         go args
@@ -725,7 +741,7 @@ builtinFuncs =
             this <- newID
             parent <- asks _envParent
             withParent (Just this) $ do
-              args' <- traverse bExpr args
+              args' <- fmap emptyShadow <$> traverse bExpr args
               tell
                 [ ( this
                   , JObj
@@ -734,17 +750,17 @@ builtinFuncs =
                       , ("inputs", JObj $ zip inputs args')
                       ])
                 ]
-              return $ JArr [JNum 1, JStr this]
+              return $ NonShadow $ JStr this
 
-builtinSymbols :: [(T.Text, Blocky JValue)]
+builtinSymbols :: [(T.Text, Blocky Reporter)]
 builtinSymbols =
   [ ("x-pos", simpleSymbol "motion_xposition")
   , ("y-pos", simpleSymbol "motion_yposition")
   ]
   where
-    simpleSymbol :: T.Text -> Blocky JValue
+    simpleSymbol :: T.Text -> Blocky Reporter
     simpleSymbol opcode = do
       this <- newID
       parent <- asks _envParent
       tell [(this, JObj [("opcode", JStr opcode), ("parent", idJSON parent)])]
-      return $ JArr [JNum 1, JStr this]
+      return $ NonShadow $ JStr this
