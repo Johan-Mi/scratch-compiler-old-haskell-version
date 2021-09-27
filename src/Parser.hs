@@ -12,7 +12,8 @@ import Control.Monad (void)
 import qualified Data.Text as T
 import LispAST (LispAST(..))
 import Text.Parsec
-  ( char
+  ( (<?>)
+  , char
   , choice
   , digit
   , eof
@@ -30,7 +31,8 @@ import Text.Parsec.Text (Parser)
 import Text.Printf (printf)
 
 comment :: Parser ()
-comment = char ';' *> skipMany (noneOf "\n") *> (void (char '\n') <|> eof)
+comment =
+  char ';' *> skipMany (noneOf "\n") *> (void (char '\n') <|> eof) <?> "comment"
 
 ws :: Parser ()
 ws = skipMany $ void space <|> comment
@@ -39,7 +41,7 @@ programP :: Parser [LispAST]
 programP = ws *> many (exprP <* ws) <* eof
 
 exprP :: Parser LispAST
-exprP = choice [try numP, stringP, symP, nodeP, unquoteP]
+exprP = choice [try numP, stringP, symP, nodeP, unquoteP] <?> "expression"
 
 -- TODO: ECMAScript-compliant number parser
 --
@@ -70,15 +72,18 @@ numberP = pm (read <$> choice [hexInt, expDec, dec, int])
       try $ printf "%se%s" <$> (decOrInt <* oneOf "eE") <*> (int <|> negInt)
 
 numP :: Parser LispAST
-numP = LispNum <$> numberP
+numP = LispNum <$> numberP <?> "number"
 
 stringP :: Parser LispAST
-stringP = LispString . T.pack <$> (char '"' *> stringContent <* char '"')
+stringP =
+  LispString . T.pack <$>
+  (char '"' *> stringContent <* char '"') <?> "string literal"
   where
     stringContent = many $ noneOf "\n\""
 
 symP :: Parser LispAST
-symP = LispSym . T.pack <$> ((:) <$> firstChar <*> many nonFirstChar)
+symP =
+  LispSym . T.pack <$> ((:) <$> firstChar <*> many nonFirstChar) <?> "symbol"
   where
     firstChar = letter <|> oneOf "!$%&*+-./:<=>?@^_~[]"
     nonFirstChar = firstChar <|> digit
@@ -87,7 +92,7 @@ inParens :: Parser a -> Parser a
 inParens p = char '(' *> ws *> p <* ws <* char ')'
 
 nodeP :: Parser LispAST
-nodeP = inParens $ LispNode <$> exprP <*> many (ws *> exprP)
+nodeP = inParens (LispNode <$> exprP <*> many (ws *> exprP)) <?> "node"
 
 unquoteP :: Parser LispAST
-unquoteP = LispUnquote <$> (char ',' *> ws *> exprP)
+unquoteP = LispUnquote <$> (char ',' *> ws *> exprP) <?> "unquote"
