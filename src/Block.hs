@@ -457,11 +457,7 @@ builtinProcs =
                   [ ("opcode", JStr "control_stop")
                   , ("next", idJSON next)
                   , ("parent", idJSON parent)
-                  , ( "inputs"
-                    , JObj
-                        [ ( "STOP_OPTION"
-                          , JArr [JNum 1, JArr [JNum 10, JStr "all"]])
-                        ])
+                  , ("fields", JObj [("STOP_OPTION", JArr [JStr "all", JNull])])
                   ])
             ]
           return (Just this, Just this)
@@ -478,11 +474,8 @@ builtinProcs =
                   [ ("opcode", JStr "control_stop")
                   , ("next", idJSON next)
                   , ("parent", idJSON parent)
-                  , ( "inputs"
-                    , JObj
-                        [ ( "STOP_OPTION"
-                          , JArr [JNum 1, JArr [JNum 10, JStr "this script"]])
-                        ])
+                  , ( "fields"
+                    , JObj [("STOP_OPTION", JArr [JStr "this script", JNull])])
                   ])
             ]
           return (Just this, Just this)
