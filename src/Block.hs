@@ -700,6 +700,46 @@ builtinFuncs =
                 ]
               return $ NonShadow $ JStr this
        in go)
+  , ( "or"
+    , let go [] = bExpr $ Lit $ VBool False
+          go [x] = bExpr x
+          go (lhs:rhs) = do
+            this <- newID
+            parent <- asks _envParent
+            withParent (Just this) $ do
+              lhs' <- emptyShadow <$> bExpr lhs
+              rhs' <- emptyShadow <$> go rhs
+              tell
+                [ ( this
+                  , JObj
+                      [ ("opcode", JStr "operator_or")
+                      , ("parent", idJSON parent)
+                      , ( "inputs"
+                        , JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
+                      ])
+                ]
+              return $ NonShadow $ JStr this
+       in go)
+  , ( "and"
+    , let go [] = bExpr $ Lit $ VBool True
+          go [x] = bExpr x
+          go (lhs:rhs) = do
+            this <- newID
+            parent <- asks _envParent
+            withParent (Just this) $ do
+              lhs' <- emptyShadow <$> bExpr lhs
+              rhs' <- emptyShadow <$> go rhs
+              tell
+                [ ( this
+                  , JObj
+                      [ ("opcode", JStr "operator_and")
+                      , ("parent", idJSON parent)
+                      , ( "inputs"
+                        , JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
+                      ])
+                ]
+              return $ NonShadow $ JStr this
+       in go)
   , simpleOperator "=" "operator_equals" ["OPERAND1", "OPERAND2"]
   , simpleOperator "<" "operator_lt" ["OPERAND1", "OPERAND2"]
   , simpleOperator ">" "operator_gt" ["OPERAND1", "OPERAND2"]
