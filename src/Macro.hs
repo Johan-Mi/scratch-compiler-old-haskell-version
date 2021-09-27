@@ -34,7 +34,7 @@ instance Show MacroError where
     printf "non-symbol in parameter list of function macro `%s`" name
   show NonSymbolMacroName = "non-symbol used as macro name"
   show (UnknownMetaVar name var) =
-    printf "unknown meta-variable `%s` in body of function macro `%s`" name var
+    printf "unknown meta-variable `%s` in body of function macro `%s`" var name
   show InvalidMacroDefinition = "invalid macro definition"
 
 type Macro = LispAST -> Maybe (Either MacroError LispAST)
