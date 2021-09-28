@@ -8,7 +8,6 @@ module Macro
 import Control.Monad (foldM)
 import Data.Function (on)
 import Data.Functor ((<&>))
-import Data.Maybe (fromMaybe)
 import Data.Monoid (First(..))
 import qualified Data.Text as T
 import LispAST (LispAST(..), asTheFunction, getSym, subTrees)
@@ -68,12 +67,13 @@ subst name mvars = go
   where
     go (LispUnquote (LispSym sym)) =
       maybeToRight (UnknownMetaVar name sym) $ lookup sym mvars
+    go (LispUnquote ast) = pure ast
     go ast = subTrees go ast
 
 expand :: Macro -> LispAST -> Either MacroError LispAST
 expand m = go
   where
-    go ast = subTrees go ast >>= \ast' -> fromMaybe (pure ast') $ m ast'
+    go ast = subTrees go ast >>= \ast' -> maybe (pure ast') (>>= go) $ m ast'
 
 expandMacros :: [LispAST] -> Either MacroError [LispAST]
 expandMacros =
