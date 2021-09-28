@@ -88,4 +88,9 @@ expandMacros =
     (getFirst . foldMap (First .) builtinMacros, [])
 
 builtinMacros :: [Macro]
-builtinMacros = []
+builtinMacros =
+  [ \case
+      (LispNode (LispSym "sym-concat!") args) ->
+        Right . LispSym . T.concat <$> traverse getSym args
+      _ -> Nothing
+  ]
