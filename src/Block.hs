@@ -74,6 +74,26 @@ bProc (Procedure "when-flag-clicked" params body) = do
             , ("y", JNum 0)
             ])
       ]
+bProc (Procedure "when-received" params body) = do
+  name <-
+    case params of
+      [Lit (VStr name')] -> return name'
+      _ -> throwError $ InvalidParamsForSpecialProcDef "when-received"
+  this <- newID
+  withParent (Just this) $ do
+    (bodyID, _) <- bStmts body
+    tell
+      [ ( this
+        , JObj
+            [ ("opcode", JStr "event_whenbroadcastreceived")
+            , ("next", idJSON bodyID)
+            , ("parent", JNull)
+            , ("fields", JObj [("BROADCAST_OPTION", JArr [JStr name, JNull])])
+            , ("topLevel", JBool True)
+            , ("x", JNum 0)
+            , ("y", JNum 0)
+            ])
+      ]
 bProc (Procedure name params body) = do
   params' <-
     for params $ \case
@@ -323,9 +343,31 @@ builtinProcs =
    , ("change-y", "motion_changeyby", [val "DY"])
    , ("set-x", "motion_setx", [val "X"])
    , ("set-y", "motion_sety", [val "Y"])
-   , ("send-broadcast-sync", "event_broadcastandwait", [val "BROADCAST_INPUT"])
    ]) ++
-  [ ( ":="
+  [ ( "send-broadcast-sync"
+    , \case
+        [name] -> do
+          this <- newID
+          next <- asks _envNext
+          parent <- asks _envParent
+          name' <-
+            case name of
+              Lit lit ->
+                return $
+                JArr [JNum 1, JArr [JNum 11, JStr (toString lit), JStr ""]]
+              n -> noShadow <$> withParent (Just this) (bExpr n)
+          tell
+            [ ( this
+              , JObj
+                  [ ("opcode", JStr "event_broadcastandwait")
+                  , ("next", idJSON next)
+                  , ("parent", idJSON parent)
+                  , ("inputs", JObj [("BROADCAST_INPUT", name')])
+                  ])
+            ]
+          return (Just this, Just this)
+        _ -> throwError $ InvalidArgsForBuiltinProc "send-broadcast-sync")
+  , ( ":="
     , \case
         [Sym varName, value] -> do
           this <- newID
