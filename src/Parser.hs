@@ -79,7 +79,8 @@ stringP =
   LispString . T.pack <$>
   (char '"' *> stringContent <* char '"') <?> "string literal"
   where
-    stringContent = many $ noneOf "\n\""
+    stringContent = many $ (char '\\' *> escaped) <|> noneOf "\n\"\\"
+    escaped = oneOf "\"\\"
 
 symP :: Parser LispAST
 symP =

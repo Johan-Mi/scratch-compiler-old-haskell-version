@@ -61,7 +61,7 @@ spec = do
       "\"this is some text\"" ==> "this is some text"
       "\"''\"" ==> "''"
       "\"abc123!#$%\"" ==> "abc123!#$%"
-      "\"backslash \\ doesn't escape\"" ==> "backslash \\ doesn't escape"
+      "\"backslash \\\\ \\\" escapes\"" ==> "backslash \\ \" escapes"
   describe "symP" $ do
     let shouldFail input = parse (symP <* eof) "" input `shouldSatisfy` isLeft
     let input ==> output =
