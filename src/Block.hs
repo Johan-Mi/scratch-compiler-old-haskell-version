@@ -74,6 +74,23 @@ bProc (Procedure "when-flag-clicked" params body) = do
             , ("y", JNum 0)
             ])
       ]
+bProc (Procedure "when-cloned" params body) = do
+  unless (null params) $
+    throwError $ InvalidParamsForSpecialProcDef "when-cloned"
+  this <- newID
+  withParent (Just this) $ do
+    (bodyID, _) <- bStmts body
+    tell
+      [ ( this
+        , JObj
+            [ ("opcode", JStr "control_start_as_clone")
+            , ("next", idJSON bodyID)
+            , ("parent", JNull)
+            , ("topLevel", JBool True)
+            , ("x", JNum 0)
+            , ("y", JNum 0)
+            ])
+      ]
 bProc (Procedure "when-received" params body) = do
   name <-
     case params of
@@ -343,6 +360,7 @@ builtinProcs =
    , ("change-y", "motion_changeyby", [val "DY"])
    , ("set-x", "motion_setx", [val "X"])
    , ("set-y", "motion_sety", [val "Y"])
+   , ("wait", "control_wait", [val "DURATION"])
    ]) ++
   [ ( "send-broadcast-sync"
     , \case
@@ -522,6 +540,33 @@ builtinProcs =
             ]
           return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "stop-this-script")
+  , ( "clone-myself"
+    , \case
+        [] -> do
+          this <- newID
+          next <- asks _envNext
+          parent <- asks _envParent
+          menu <- newID
+          tell
+            [ ( this
+              , JObj
+                  [ ("opcode", JStr "control_create_clone_of")
+                  , ("next", idJSON next)
+                  , ("parent", idJSON parent)
+                  , ( "inputs"
+                    , JObj [("CLONE_OPTION", JArr [JNum 1, JStr menu])])
+                  ])
+            , ( menu
+              , JObj
+                  [ ("opcode", JStr "control_create_clone_of_menu")
+                  , ("parent", JStr this)
+                  , ( "fields"
+                    , JObj [("CLONE_OPTION", JArr [JStr "_myself_", JNull])])
+                  , ("shadow", JBool True)
+                  ])
+            ]
+          return (Just this, Just this)
+        _ -> throwError $ InvalidArgsForBuiltinProc "clone-myself")
   ]
   where
     val = (, fmap emptyShadow . bExpr)
@@ -782,6 +827,20 @@ builtinFuncs =
   , simpleOperator "not" "operator_not" ["OPERAND"]
   , simpleOperator "char-at" "operator_letter_of" ["STRING", "LETTER"]
   , simpleOperator "mod" "operator_mod" ["NUM1", "NUM2"]
+  , mathOp "abs" "abs"
+  , mathOp "floor" "floor"
+  , mathOp "ceil" "ceiling"
+  , mathOp "sqrt" "sqrt"
+  , mathOp "ln" "ln"
+  , mathOp "log" "log"
+  , mathOp "e^" "e ^"
+  , mathOp "10^" "10 ^"
+  , mathOp "sin" "sin"
+  , mathOp "cos" "cos"
+  , mathOp "tan" "tan"
+  , mathOp "asin" "asin"
+  , mathOp "acos" "acos"
+  , mathOp "atan" "atan"
   , ( "length"
     , \case
         [listName] -> do
@@ -826,11 +885,31 @@ builtinFuncs =
                       ])
                 ]
               return $ NonShadow $ JStr this
+    mathOp :: T.Text -> T.Text -> (T.Text, [Expr] -> Blocky Reporter)
+    mathOp name op =
+      ( name
+      , \case
+          [num] -> do
+            this <- newID
+            parent <- asks _envParent
+            num' <- fmap emptyShadow $ withParent (Just this) $ bExpr num
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "operator_mathop")
+                    , ("parent", idJSON parent)
+                    , ("inputs", JObj [("NUM", num')])
+                    , ("fields", JObj [("OPERATOR", JArr [JStr op, JNull])])
+                    ])
+              ]
+            return $ NonShadow $ JStr this
+          args -> throwError $ FuncWrongArgCount name (Exactly 1) (length args))
 
 builtinSymbols :: [(T.Text, Blocky Reporter)]
 builtinSymbols =
   [ ("x-pos", simpleSymbol "motion_xposition")
   , ("y-pos", simpleSymbol "motion_yposition")
+  , ("timer", simpleSymbol "sensing_timer")
   ]
   where
     simpleSymbol :: T.Text -> Blocky Reporter
