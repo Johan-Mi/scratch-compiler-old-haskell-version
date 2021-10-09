@@ -5,12 +5,18 @@ module Macro
   ( expandMacros
   ) where
 
+import Control.Applicative ((<|>))
+import Control.Arrow (left)
 import Control.Monad (foldM)
-import Data.Function (on)
+import Control.Monad.Except (ExceptT(..), liftEither, throwError)
 import Data.Functor ((<&>))
+import Data.Maybe (fromMaybe)
 import Data.Monoid (First(..))
 import qualified Data.Text as T
+import Error (Error(..), IsError)
 import LispAST (LispAST(..), asTheFunction, getSym, subTrees)
+import Parser (programP)
+import Text.Parsec.Text (parseFromFile)
 import Text.Printf (printf)
 import Utils.Either (maybeToRight)
 
@@ -19,6 +25,7 @@ data MacroError
   | NonSymbolParam T.Text
   | NonSymbolMacroName
   | UnknownMetaVar T.Text T.Text
+  | InvalidArgsForInclude
   | InvalidMacroDefinition -- Very unspecific, TODO: Better errors
   deriving (Eq)
 
@@ -35,6 +42,9 @@ instance Show MacroError where
   show (UnknownMetaVar name var) =
     printf "unknown meta-variable `%s` in body of function macro `%s`" var name
   show InvalidMacroDefinition = "invalid macro definition"
+  show InvalidArgsForInclude = "invalid args for an `include` statement"
+
+instance IsError MacroError
 
 type Macro = LispAST -> Maybe (Either MacroError LispAST)
 
@@ -75,17 +85,28 @@ expand m = go
   where
     go ast = subTrees go ast >>= \ast' -> maybe (pure ast') (>>= go) $ m ast'
 
-expandMacros :: [LispAST] -> Either MacroError [LispAST]
+include :: LispAST -> Maybe (ExceptT Error IO [LispAST])
+include =
+  flip asTheFunction "include" $ \case
+    [LispString path] ->
+      ExceptT $ left Error <$> parseFromFile programP (T.unpack path)
+    _ -> throwError $ Error InvalidArgsForInclude
+
+expandList ::
+     (Macro, [LispAST]) -> [LispAST] -> ExceptT Error IO (Macro, [LispAST])
+expandList =
+  foldM $ \(macros, accum) ast -> do
+    ast' <- liftEither $ left Error $ expand macros ast
+    let theMacro =
+          mkMacro ast' <&> liftEither . left Error .
+          fmap (\m' -> (getFirst . (First . macros <> First . m'), accum))
+    let theInclude = include ast <&> (>>= expandList (macros, accum))
+    let theNormal = return (macros, accum ++ [ast'])
+    fromMaybe theNormal $ theMacro <|> theInclude
+
+expandMacros :: [LispAST] -> ExceptT Error IO [LispAST]
 expandMacros =
-  fmap snd .
-  foldM
-    (\(macros, accum) ast -> do
-       ast' <- expand macros ast
-       case mkMacro ast' of
-         Just m ->
-           m <&> \m' -> (getFirst . ((<>) `on` (First .)) macros m', accum)
-         Nothing -> return (macros, accum ++ [ast']))
-    (getFirst . foldMap (First .) builtinMacros, [])
+  fmap snd . expandList (getFirst . foldMap (First .) builtinMacros, [])
 
 builtinMacros :: [Macro]
 builtinMacros =

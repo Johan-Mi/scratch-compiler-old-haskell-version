@@ -16,7 +16,7 @@ compileProgram :: FilePath -> IO ()
 compileProgram path =
   either id return <=< runExceptT $ do
     parsed <- liftEither . left print =<< liftIO (parseFromFile programP path)
-    expanded <- liftEither $ left print $ expandMacros parsed
+    expanded <- withExceptT print $ expandMacros parsed
     prg <- liftEither $ left print $ mkProgram expanded
     let optimized = optimize prg
     withExceptT print $ writeSB3File optimized

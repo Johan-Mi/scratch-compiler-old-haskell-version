@@ -4,6 +4,7 @@ module MacroSpec
   ( spec
   ) where
 
+import Control.Monad.Except (runExceptT)
 import Macro
 import Parser (programP)
 import Test.Hspec
@@ -11,10 +12,15 @@ import qualified Text.Parsec
 
 spec :: Spec
 spec = do
-  let parse = Text.Parsec.parse programP ""
+  let fromRight' = either undefined id
+  let parse = fromRight' . Text.Parsec.parse programP ""
   describe "expandMacros" $ do
-    let input ==> output =
-          expandMacros <$> parse input `shouldBe` Right <$> parse output
+    let input ==> output -- Yes, this code is really ugly but I don't know how
+                         -- to improve it since it's a messy mix of IO, Either,
+                         -- exceptions and existential quantification
+         =
+          fromRight' <$>
+          runExceptT (expandMacros $ parse input) `shouldReturn` parse output
     it "expands symbol macros" $ do
       "(macro hello (say \"Hello\")) hello" ==> "(say \"Hello\")"
       "(macro puts print) (puts (* 2 5))" ==> "(print (* 2 5))"

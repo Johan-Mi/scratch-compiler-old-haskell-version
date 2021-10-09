@@ -29,6 +29,7 @@ library
       Block
       Block.Env
       Block.Error
+      Error
       JSON
       Lib
       LispAST
