@@ -7,8 +7,9 @@ module Macro
 
 import Control.Applicative ((<|>))
 import Control.Arrow (left)
-import Control.Monad (foldM)
+import Control.Monad (foldM, guard)
 import Control.Monad.Except (ExceptT(..), liftEither, throwError)
+import Data.Either (isRight)
 import Data.Functor ((<&>))
 import Data.Maybe (fromMaybe)
 import Data.Monoid (First(..))
@@ -46,7 +47,9 @@ instance Show MacroError where
 
 instance IsError MacroError
 
-type Macro = LispAST -> Maybe (Either MacroError LispAST)
+type MacroM = ExceptT Error IO
+
+type Macro = LispAST -> Maybe (MacroM LispAST)
 
 mkMacro :: LispAST -> Maybe (Either MacroError Macro)
 mkMacro =
@@ -54,7 +57,7 @@ mkMacro =
     [LispSym name, body] ->
       Right $ \case
         LispSym name'
-          | name' == name -> Just $ Right body
+          | name' == name -> Just $ pure body
         _ -> Nothing
     [LispNode name params, body] -> do
       name' <- maybeToRight NonSymbolMacroName $ getSym name
@@ -66,37 +69,38 @@ mkFuncMacro :: T.Text -> [T.Text] -> LispAST -> Macro
 mkFuncMacro name params body = f `asTheFunction` name
   where
     f args
-      | nargs /= nparams = Left $ WrongArgCount name nparams nargs
+      | nargs /= nparams = throwError $ Error $ WrongArgCount name nparams nargs
       | otherwise = subst name (zip params args) body
       where
         nargs = length args
         nparams = length params
 
-subst :: T.Text -> [(T.Text, LispAST)] -> LispAST -> Either MacroError LispAST
+subst :: T.Text -> [(T.Text, LispAST)] -> LispAST -> MacroM LispAST
 subst name mvars = go
   where
+    go :: LispAST -> MacroM LispAST
     go (LispUnquote (LispSym sym)) =
-      maybeToRight (UnknownMetaVar name sym) $ lookup sym mvars
+      maybe (throwError $ Error $ UnknownMetaVar name sym) pure $
+      lookup sym mvars
     go (LispUnquote ast) = pure ast
     go ast = subTrees go ast
 
-expand :: Macro -> LispAST -> Either MacroError LispAST
+expand :: Macro -> LispAST -> MacroM LispAST
 expand m = go
   where
     go ast = subTrees go ast >>= \ast' -> maybe (pure ast') (>>= go) $ m ast'
 
-include :: LispAST -> Maybe (ExceptT Error IO [LispAST])
+include :: LispAST -> Maybe (MacroM [LispAST])
 include =
   flip asTheFunction "include" $ \case
     [LispString path] ->
       ExceptT $ left Error <$> parseFromFile programP (T.unpack path)
     _ -> throwError $ Error InvalidArgsForInclude
 
-expandList ::
-     (Macro, [LispAST]) -> [LispAST] -> ExceptT Error IO (Macro, [LispAST])
+expandList :: (Macro, [LispAST]) -> [LispAST] -> MacroM (Macro, [LispAST])
 expandList =
   foldM $ \(macros, accum) ast -> do
-    ast' <- liftEither $ left Error $ expand macros ast
+    ast' <- expand macros ast
     let theMacro =
           mkMacro ast' <&> liftEither . left Error .
           fmap (\m' -> (getFirst . (First . macros <> First . m'), accum))
@@ -104,7 +108,7 @@ expandList =
     let theNormal = return (macros, accum ++ [ast'])
     fromMaybe theNormal $ theMacro <|> theInclude
 
-expandMacros :: [LispAST] -> ExceptT Error IO [LispAST]
+expandMacros :: [LispAST] -> MacroM [LispAST]
 expandMacros =
   fmap snd . expandList (getFirst . foldMap (First .) builtinMacros, [])
 
@@ -112,6 +116,13 @@ builtinMacros :: [Macro]
 builtinMacros =
   [ \case
       (LispNode (LispSym "sym-concat!") args) ->
-        Right . LispSym . T.concat <$> traverse getSym args
+        pure . LispSym . T.concat <$> traverse getSym args
+      _ -> Nothing
+  , \case
+      (LispNode fn asts) -> do
+        let maybeIncludes = maybeToRight . pure . pure <*> include <$> asts
+        guard $ any isRight maybeIncludes
+        let asts' = either id id <$> maybeIncludes
+        return $ LispNode fn . concat <$> sequenceA asts'
       _ -> Nothing
   ]
