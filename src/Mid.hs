@@ -8,7 +8,7 @@ module Mid
 
 import Data.Function (on)
 import Data.List (partition, sortOn)
-import Data.List.NonEmpty (NonEmpty(..), groupBy)
+import Data.List.NonEmpty (groupBy)
 import Data.Semigroup (sconcat)
 import Lens.Micro (Lens', Traversal', (^.))
 import LispAST (LispAST)
@@ -30,8 +30,8 @@ sprites f prg = (\spr -> prg {_sprites = spr}) <$> f (_sprites prg)
 
 targets :: Traversal' Program Sprite
 targets f prg =
-  (\(sc :| spr) -> prg {_stage = sc, _sprites = spr}) <$>
-  traverse f (_stage prg :| _sprites prg)
+  (\sc spr -> prg {_stage = sc, _sprites = spr}) <$> f (_stage prg) <*>
+  traverse f (_sprites prg)
 
 mkProgram :: [LispAST] -> Either MidError Program
 mkProgram asts = do
