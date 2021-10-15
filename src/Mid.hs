@@ -6,12 +6,14 @@ module Mid
   , targets
   ) where
 
-import Data.List (partition)
-import Data.List.NonEmpty (NonEmpty(..))
-import Lens.Micro (Lens', Traversal')
+import Data.Function (on)
+import Data.List (partition, sortOn)
+import Data.List.NonEmpty (NonEmpty(..), groupBy)
+import Data.Semigroup (sconcat)
+import Lens.Micro (Lens', Traversal', (^.))
 import LispAST (LispAST)
 import Mid.Error (MidError(..))
-import Mid.Sprite (Sprite, isStage, mkSprite)
+import Mid.Sprite (Sprite, isStage, mkSprite, spriteName)
 
 data Program =
   Program
@@ -34,9 +36,13 @@ targets f prg =
 mkProgram :: [LispAST] -> Either MidError Program
 mkProgram asts = do
   spritesAndStages <- traverse mkSprite asts
-  let (stages, sprites') = partition isStage spritesAndStages
+  let mergedSpritesAndStages =
+        fmap sconcat $
+        groupBy ((==) `on` (^. spriteName)) $
+        sortOn (^. spriteName) spritesAndStages
+  let (stages, sprites') = partition isStage mergedSpritesAndStages
   stage' <-
     case stages of
       [theStage] -> Right theStage
-      xs -> Left $ WrongStageCount $ length xs
+      _ -> Left NoStage
   return $ Program stage' sprites'

@@ -9,7 +9,7 @@ import Utils.Text (cropTextTo)
 
 data MidError
   = NonSpriteAtTopLevel LispAST
-  | WrongStageCount Int
+  | NoStage
   | NonSymbolInVarDecl
   | NonSymbolInListDecl
   | InvalidItemInSprite LispAST
@@ -26,8 +26,7 @@ instance Show MidError where
   show (NonSpriteAtTopLevel ast) =
     printf "non-sprite at top level of program: `%s`" $
     cropTextTo 30 $ T.pack $ show ast
-  show (WrongStageCount count) =
-    printf "%d stages found instead of exactly one" count
+  show NoStage = "program has no stage"
   show NonSymbolInVarDecl = "non-symbol in variable declaration"
   show NonSymbolInListDecl = "non-symbol in list declaration"
   show (InvalidItemInSprite ast) =

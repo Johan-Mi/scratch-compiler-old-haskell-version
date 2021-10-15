@@ -30,6 +30,10 @@ data Sprite =
     }
   deriving (Show)
 
+instance Semigroup Sprite where
+  Sprite nm co va li pr <> Sprite _nm' co' va' li' pr' =
+    Sprite nm (co <> co') (va <> va') (li <> li') (pr <> pr')
+
 spriteName :: Lens' Sprite T.Text
 spriteName f spr = (\name -> spr {_name = name}) <$> f (_name spr)
 
