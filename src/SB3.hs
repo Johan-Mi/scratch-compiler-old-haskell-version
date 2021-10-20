@@ -68,9 +68,9 @@ projectJSON prg = do
           , _envNext = Nothing
           , _envProcs = []
           , _envProcArgs = []
-          , _envLocalVars = []
+          , _envSpriteVars = []
           , _envGlobalVars = globalVars
-          , _envLocalLists = []
+          , _envSpriteLists = []
           , _envGlobalLists = globalLists
           }
   (targets', assetLists) <-
@@ -82,8 +82,8 @@ spriteJSON ::
      Env -> Sprite -> StateT UIDState (ExceptT BlockError IO) (JValue, [Asset])
 spriteJSON env spr = do
   costumes' <- liftIO $ traverse (uncurry makeAsset) $ spr ^. costumes
-  localVars <- for (spr ^. variables) $ \v -> (v, ) <$> newID
-  localLists <- for (spr ^. lists) $ \v -> (v, ) <$> newID
+  spriteVars <- for (spr ^. variables) $ \v -> (v, ) <$> newID
+  spriteLists <- for (spr ^. lists) $ \v -> (v, ) <$> newID
   procs <-
     for (spr ^. procedures) $ \p -> do
       params <- for [s | Sym s <- p ^. procedureParams] $ \v -> (v, ) <$> newID
@@ -91,8 +91,8 @@ spriteJSON env spr = do
   let env' =
         env
           { _envProcs = procs
-          , _envLocalVars = localVars
-          , _envLocalLists = localLists
+          , _envSpriteVars = spriteVars
+          , _envSpriteLists = spriteLists
           }
   blocks <-
     concat <$>
@@ -104,9 +104,9 @@ spriteJSON env spr = do
         [ ("name", JStr (spr ^. spriteName))
         , ("isStage", JBool (isStage spr))
         , ( "variables"
-          , JObj $ localVars <&> \(v, i) -> (i, JArr [JStr v, JNum 0]))
+          , JObj $ spriteVars <&> \(v, i) -> (i, JArr [JStr v, JNum 0]))
         , ( "lists"
-          , JObj $ localLists <&> \(v, i) -> (i, JArr [JStr v, JArr []]))
+          , JObj $ spriteLists <&> \(v, i) -> (i, JArr [JStr v, JArr []]))
         , ("costumes", JArr (assetJSON <$> costumes'))
         , ("currentCostume", JNum 1)
         , ("sounds", JArr [])

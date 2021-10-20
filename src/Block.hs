@@ -573,18 +573,18 @@ builtinProcs =
 
 varField :: T.Text -> Blocky JValue
 varField name = do
-  localVars <- asks _envLocalVars
+  spriteVars <- asks _envSpriteVars
   globalVars <- asks _envGlobalVars
-  let vars = localVars ++ globalVars
+  let vars = spriteVars ++ globalVars
   case lookup name vars of
     Just varID -> return $ JArr [JStr name, JStr varID]
     Nothing -> throwError $ VarDoesntExist name
 
 listField :: T.Text -> Blocky JValue
 listField name = do
-  localLists <- asks _envLocalLists
+  spriteLists <- asks _envSpriteLists
   globalLists <- asks _envGlobalLists
-  let lists = localLists ++ globalLists
+  let lists = spriteLists ++ globalLists
   case lookup name lists of
     Just listID -> return $ JArr [JStr name, JStr listID]
     Nothing -> throwError $ ListDoesntExist name
@@ -633,8 +633,8 @@ bExpr (Lit lit) = return $ Shadow $ JArr [JNum 10, JStr $ toString lit]
 bExpr (Sym sym) = do
   env <- ask
   let procArgs = _envProcArgs env
-      vars = _envLocalVars env ++ _envGlobalVars env
-      lists = _envLocalLists env ++ _envGlobalLists env
+      vars = _envSpriteVars env ++ _envGlobalVars env
+      lists = _envSpriteLists env ++ _envGlobalLists env
       theProcArg =
         guard (sym `elem` procArgs) $> do
           this <- newID

@@ -18,9 +18,9 @@ data Env =
     , _envNext :: Maybe UID
     , _envProcs :: [(T.Text, [(T.Text, UID)])]
     , _envProcArgs :: [T.Text]
-    , _envLocalVars :: [(T.Text, UID)]
+    , _envSpriteVars :: [(T.Text, UID)]
     , _envGlobalVars :: [(T.Text, UID)]
-    , _envLocalLists :: [(T.Text, UID)]
+    , _envSpriteLists :: [(T.Text, UID)]
     , _envGlobalLists :: [(T.Text, UID)]
     }
 
