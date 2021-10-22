@@ -14,10 +14,10 @@ module Mid.Sprite
 import Data.Maybe (listToMaybe)
 import qualified Data.Text as T
 import Lens.Micro (Lens')
-import LispAST (LispAST(..), asTheFunction, getSym)
+import LispAST (LispAST(..), asTheFunction)
 import Mid.Error (MidError(..))
-import Mid.Proc (Procedure, mkProc)
-import Utils.Either (justFailWith, maybeToRight)
+import Mid.Proc (Procedure, mkListDecl, mkProc, mkVarDecl)
+import Utils.Either (justFailWith)
 import Utils.Maybe (partitionMaybe)
 
 data Sprite =
@@ -74,12 +74,3 @@ mkCostumeList = f `asTheFunction` "costumes"
     f [LispString name] = Left $ CostumeLacksFilePath name
     f (LispString name:LispString path:xs) = ((name, T.unpack path) :) <$> f xs
     f _ = Left NonStringInCostumeList
-
-mkVarDecl :: LispAST -> Maybe (Either MidError [T.Text])
-mkVarDecl =
-  (maybeToRight NonSymbolInVarDecl . traverse getSym) `asTheFunction`
-  "variables"
-
-mkListDecl :: LispAST -> Maybe (Either MidError [T.Text])
-mkListDecl =
-  (maybeToRight NonSymbolInListDecl . traverse getSym) `asTheFunction` "lists"

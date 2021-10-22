@@ -5,7 +5,10 @@ module Mid.Proc
   ( Procedure(..)
   , procedureName
   , procedureParams
+  , procedureBody
   , mkProc
+  , mkVarDecl
+  , mkListDecl
   , Statement(..)
   , subStmts
   , stmtExprs
@@ -14,30 +17,44 @@ module Mid.Proc
 import Data.Functor ((<&>))
 import qualified Data.Text as T
 import Lens.Micro (Lens', Traversal')
-import LispAST (LispAST(..), asTheFunction)
+import LispAST (LispAST(..), asTheFunction, getSym)
 import Mid.Error (MidError(..))
 import Mid.Expr (Expr, mkExpr)
+import Utils.Either (maybeToRight)
+import Utils.Maybe (partitionMaybe)
 
 data Procedure =
-  Procedure T.Text [Expr] [Statement]
+  Procedure
+    { _procName :: T.Text
+    , _procParams :: [Expr]
+    , _procBody :: [Statement]
+    , _procVars :: [T.Text]
+    , _procLists :: [T.Text]
+    }
   deriving (Show)
 
 procedureName :: Lens' Procedure T.Text
-procedureName f (Procedure name params body) =
-  (\name' -> Procedure name' params body) <$> f name
+procedureName f proc = (\name -> proc {_procName = name}) <$> f (_procName proc)
 
 procedureParams :: Lens' Procedure [Expr]
-procedureParams f (Procedure name params body) =
-  (\params' -> Procedure name params' body) <$> f params
+procedureParams f proc =
+  (\params -> proc {_procParams = params}) <$> f (_procParams proc)
+
+procedureBody :: Lens' Procedure [Statement]
+procedureBody f proc = (\body -> proc {_procBody = body}) <$> f (_procBody proc)
 
 mkProc :: LispAST -> Maybe (Either MidError Procedure)
 mkProc = f `asTheFunction` "proc"
   where
     f [] = Left ProcDefLacksSignature
-    f (sig:stmts) = do
+    f (sig:stmtsAndDecls) = do
       (name, params) <- mkProcSignature sig
-      body <- traverse mkStatement stmts
-      return $ Procedure name params body
+      let (stmts, varDecls) = partitionMaybe mkVarDecl stmtsAndDecls
+      let (stmts', listDecls) = partitionMaybe mkListDecl stmts
+      vars <- concat <$> sequenceA varDecls
+      lists <- concat <$> sequenceA listDecls
+      body <- traverse mkStatement stmts'
+      return $ Procedure name params body vars lists
 
 mkProcSignature :: LispAST -> Either MidError (T.Text, [Expr])
 mkProcSignature (LispNode (LispSym name) params) =
@@ -143,3 +160,12 @@ stmtExprs f stmt =
     (Until cond body) -> Until <$> f cond <&> ($ body)
     (While cond body) -> While <$> f cond <&> ($ body)
     (For var times body) -> For <$> f var <*> f times <&> ($ body)
+
+mkVarDecl :: LispAST -> Maybe (Either MidError [T.Text])
+mkVarDecl =
+  (maybeToRight NonSymbolInVarDecl . traverse getSym) `asTheFunction`
+  "variables"
+
+mkListDecl :: LispAST -> Maybe (Either MidError [T.Text])
+mkListDecl =
+  (maybeToRight NonSymbolInListDecl . traverse getSym) `asTheFunction` "lists"

@@ -13,7 +13,7 @@ import Block.Error (ArgCount(..), BlockError(..))
 import Control.Monad (guard, unless, zipWithM)
 import Control.Monad.Except (Except, throwError)
 import Control.Monad.RWS (RWST, runRWST)
-import Control.Monad.Reader (ReaderT, ask, asks)
+import Control.Monad.Reader (ReaderT, ask, asks, local)
 import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
@@ -57,12 +57,12 @@ procToBlocks proc = do
   return w
 
 bProc :: Procedure -> Blocky ()
-bProc (Procedure "when-flag-clicked" params body) = do
+bProc (Procedure "when-flag-clicked" params body vars lists) = do
   unless (null params) $
     throwError $ InvalidParamsForSpecialProcDef "when-flag-clicked"
   this <- newID
   withParent (Just this) $ do
-    (bodyID, _) <- bStmts body
+    (bodyID, _) <- withLocals vars lists $ bStmts body
     tell
       [ ( this
         , JObj
@@ -74,12 +74,12 @@ bProc (Procedure "when-flag-clicked" params body) = do
             , ("y", JNum 0)
             ])
       ]
-bProc (Procedure "when-cloned" params body) = do
+bProc (Procedure "when-cloned" params body vars lists) = do
   unless (null params) $
     throwError $ InvalidParamsForSpecialProcDef "when-cloned"
   this <- newID
   withParent (Just this) $ do
-    (bodyID, _) <- bStmts body
+    (bodyID, _) <- withLocals vars lists $ bStmts body
     tell
       [ ( this
         , JObj
@@ -91,14 +91,14 @@ bProc (Procedure "when-cloned" params body) = do
             , ("y", JNum 0)
             ])
       ]
-bProc (Procedure "when-received" params body) = do
+bProc (Procedure "when-received" params body vars lists) = do
   name <-
     case params of
       [Lit (VStr name')] -> return name'
       _ -> throwError $ InvalidParamsForSpecialProcDef "when-received"
   this <- newID
   withParent (Just this) $ do
-    (bodyID, _) <- bStmts body
+    (bodyID, _) <- withLocals vars lists $ bStmts body
     tell
       [ ( this
         , JObj
@@ -111,14 +111,15 @@ bProc (Procedure "when-received" params body) = do
             , ("y", JNum 0)
             ])
       ]
-bProc (Procedure name params body) = do
+bProc (Procedure name params body vars lists) = do
   params' <-
     for params $ \case
       Sym sym -> return sym
       _ -> throwError $ NonSymbolInProcDef name
   this <- newID
   withParent (Just this) $
-    withProcArgs params' $ do
+    withProcArgs params' $
+    withLocals vars lists $ do
       (bodyID, _) <- bStmts body
       exisitingProcs <- asks _envProcs
       protoypeID <- newID
@@ -573,20 +574,22 @@ builtinProcs =
 
 varField :: T.Text -> Blocky JValue
 varField name = do
+  localVars <- asks _envLocalVars
   spriteVars <- asks _envSpriteVars
   globalVars <- asks _envGlobalVars
-  let vars = spriteVars ++ globalVars
+  let vars = localVars ++ spriteVars ++ globalVars
   case lookup name vars of
-    Just varID -> return $ JArr [JStr name, JStr varID]
+    Just (varID, name') -> return $ JArr [JStr name', JStr varID]
     Nothing -> throwError $ VarDoesntExist name
 
 listField :: T.Text -> Blocky JValue
 listField name = do
+  localLists <- asks _envLocalLists
   spriteLists <- asks _envSpriteLists
   globalLists <- asks _envGlobalLists
-  let lists = spriteLists ++ globalLists
+  let lists = localLists ++ spriteLists ++ globalLists
   case lookup name lists of
-    Just listID -> return $ JArr [JStr name, JStr listID]
+    Just (listID, name') -> return $ JArr [JStr name', JStr listID]
     Nothing -> throwError $ ListDoesntExist name
 
 stackBlock ::
@@ -633,8 +636,8 @@ bExpr (Lit lit) = return $ Shadow $ JArr [JNum 10, JStr $ toString lit]
 bExpr (Sym sym) = do
   env <- ask
   let procArgs = _envProcArgs env
-      vars = _envSpriteVars env ++ _envGlobalVars env
-      lists = _envSpriteLists env ++ _envGlobalLists env
+      vars = _envLocalVars env ++ _envSpriteVars env ++ _envGlobalVars env
+      lists = _envLocalLists env ++ _envSpriteLists env ++ _envGlobalLists env
       theProcArg =
         guard (sym `elem` procArgs) $> do
           this <- newID
@@ -649,11 +652,11 @@ bExpr (Sym sym) = do
             ]
           return $ NonShadow $ JStr this
       theVar =
-        lookup sym vars <&> \i ->
-          return $ NonShadow $ JArr [JNum 12, JStr sym, JStr i]
+        lookup sym vars <&> \(i, name) ->
+          return $ NonShadow $ JArr [JNum 12, JStr name, JStr i]
       theList =
-        lookup sym lists <&> \i ->
-          return $ NonShadow $ JArr [JNum 13, JStr sym, JStr i]
+        lookup sym lists <&> \(i, name) ->
+          return $ NonShadow $ JArr [JNum 13, JStr name, JStr i]
       theBuiltin = lookup sym builtinSymbols
   fromMaybe err $
     getFirst $ foldMap First [theProcArg, theVar, theList, theBuiltin]
@@ -918,3 +921,11 @@ builtinSymbols =
       parent <- asks _envParent
       tell [(this, JObj [("opcode", JStr opcode), ("parent", idJSON parent)])]
       return $ NonShadow $ JStr this
+
+withLocals :: [T.Text] -> [T.Text] -> Blocky a -> Blocky a
+withLocals vars lists comp = do
+  vars' <- for vars $ \v -> newID <&> \i -> (v, (i, mangle v i))
+  lists' <- for lists $ \v -> newID <&> \i -> (v, (i, mangle v i))
+  local (\env -> env {_envLocalVars = vars', _envLocalLists = lists'}) comp
+  where
+    mangle v i = "local " <> i <> " " <> v

@@ -60,16 +60,18 @@ projectJSON ::
      Program -> StateT UIDState (ExceptT BlockError IO) (JValue, [Asset])
 projectJSON prg = do
   let meta = JObj [("semver", JStr "3.0.0")]
-  globalVars <- for (prg ^. stage . variables) $ \v -> (v, ) <$> newID
-  globalLists <- for (prg ^. stage . lists) $ \v -> (v, ) <$> newID
+  globalVars <- for (prg ^. stage . variables) $ \v -> (v, ) . (, v) <$> newID
+  globalLists <- for (prg ^. stage . lists) $ \v -> (v, ) . (, v) <$> newID
   let env =
         Env
           { _envParent = Nothing
           , _envNext = Nothing
           , _envProcs = []
           , _envProcArgs = []
+          , _envLocalVars = []
           , _envSpriteVars = []
           , _envGlobalVars = globalVars
+          , _envLocalLists = []
           , _envSpriteLists = []
           , _envGlobalLists = globalLists
           }
@@ -82,8 +84,8 @@ spriteJSON ::
      Env -> Sprite -> StateT UIDState (ExceptT BlockError IO) (JValue, [Asset])
 spriteJSON env spr = do
   costumes' <- liftIO $ traverse (uncurry makeAsset) $ spr ^. costumes
-  spriteVars <- for (spr ^. variables) $ \v -> (v, ) <$> newID
-  spriteLists <- for (spr ^. lists) $ \v -> (v, ) <$> newID
+  spriteVars <- for (spr ^. variables) $ \v -> (v, ) . (, v) <$> newID
+  spriteLists <- for (spr ^. lists) $ \v -> (v, ) . (, v) <$> newID
   procs <-
     for (spr ^. procedures) $ \p -> do
       params <- for [s | Sym s <- p ^. procedureParams] $ \v -> (v, ) <$> newID
@@ -104,9 +106,9 @@ spriteJSON env spr = do
         [ ("name", JStr (spr ^. spriteName))
         , ("isStage", JBool (isStage spr))
         , ( "variables"
-          , JObj $ spriteVars <&> \(v, i) -> (i, JArr [JStr v, JNum 0]))
+          , JObj $ spriteVars <&> \(_, (i, v)) -> (i, JArr [JStr v, JNum 0]))
         , ( "lists"
-          , JObj $ spriteLists <&> \(v, i) -> (i, JArr [JStr v, JArr []]))
+          , JObj $ spriteLists <&> \(_, (i, v)) -> (i, JArr [JStr v, JArr []]))
         , ("costumes", JArr (assetJSON <$> costumes'))
         , ("currentCostume", JNum 1)
         , ("sounds", JArr [])

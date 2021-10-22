@@ -6,7 +6,7 @@ import Data.Monoid (First(..))
 import Lens.Micro ((%~), each, rewriteOf, transformOf)
 import Mid (Program, targets)
 import Mid.Expr (Expr, subExprs)
-import Mid.Proc (Procedure(..), Statement, stmtExprs, subStmts)
+import Mid.Proc (Procedure(..), Statement, procedureBody, stmtExprs, subStmts)
 import Mid.Sprite (Sprite, procedures)
 import Optimizations (exprOptimizations, stmtOptimizations)
 
@@ -20,8 +20,7 @@ instance Optimizable Sprite where
   optimize = procedures . each %~ optimize
 
 instance Optimizable Procedure where
-  optimize (Procedure name params body) =
-    Procedure name params (optimize <$> body)
+  optimize = procedureBody . each %~ optimize
 
 instance Optimizable Statement where
   optimize =
