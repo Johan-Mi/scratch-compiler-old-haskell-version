@@ -63,7 +63,7 @@ mkSprite (LispNode (LispSym "sprite") (LispString name':args)) = do
   vars <- concat <$> sequenceA varDecls
   lists' <- concat <$> sequenceA listDecls
   procedures' <- sequenceA procDefs
-  return $ Sprite name' costumes' vars lists' procedures'
+  pure $ Sprite name' costumes' vars lists' procedures'
 mkSprite (LispNode (LispSym "sprite") _) = Left SpriteLacksName
 mkSprite nonSprite = Left $ NonSpriteAtTopLevel nonSprite
 

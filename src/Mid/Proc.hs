@@ -54,7 +54,7 @@ mkProc = f `asTheFunction` "proc"
       vars <- concat <$> sequenceA varDecls
       lists <- concat <$> sequenceA listDecls
       body <- traverse mkStatement stmts'
-      return $ Procedure name params body vars lists
+      pure $ Procedure name params body vars lists
 
 mkProcSignature :: LispAST -> Either MidError (T.Text, [Expr])
 mkProcSignature (LispNode (LispSym name) params) =
@@ -130,7 +130,7 @@ stmtUnless :: [LispAST] -> Either MidError Statement
 stmtUnless (cond:body) = do
   cond' <- mkExpr $ LispNode (LispSym "not") [cond]
   body' <- traverse mkStatement body
-  return $ IfElse cond' (Do body') (Do [])
+  pure $ IfElse cond' (Do body') (Do [])
 stmtUnless _ = Left $ InvalidArgumentsFor "unless"
 
 stmtCond :: [LispAST] -> Either MidError Statement

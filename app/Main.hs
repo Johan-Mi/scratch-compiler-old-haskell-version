@@ -11,5 +11,5 @@ main = do
     case args of
       [path'] -> pure path'
       [] -> pure "program.scratch"
-      _ -> putStrLn "Too many command line arguments" >> exitFailure
+      _ -> putStrLn "Too many command line arguments" *> exitFailure
   compileProgram path

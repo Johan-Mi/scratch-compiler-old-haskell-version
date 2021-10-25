@@ -14,7 +14,7 @@ import Text.Parsec.Text (parseFromFile)
 
 compileProgram :: FilePath -> IO ()
 compileProgram path =
-  either id return <=< runExceptT $ do
+  either id pure <=< runExceptT $ do
     parsed <- liftEither . left print =<< liftIO (parseFromFile programP path)
     expanded <- withExceptT print $ expandMacros parsed
     prg <- liftEither $ left print $ mkProgram expanded

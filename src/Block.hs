@@ -55,7 +55,7 @@ procToBlocks proc = do
   st <- get
   (_, s, w) <- lift $ lift $ runRWST (bProc proc) env st
   put s
-  return w
+  pure w
 
 bProc :: Procedure -> Blocky ()
 bProc (Procedure "when-flag-clicked" params body vars lists) = do
@@ -95,7 +95,7 @@ bProc (Procedure "when-cloned" params body vars lists) = do
 bProc (Procedure "when-received" params body vars lists) = do
   name <-
     case params of
-      [Lit (VStr name')] -> return name'
+      [Lit (VStr name')] -> pure name'
       _ -> throwError $ InvalidParamsForSpecialProcDef "when-received"
   this <- newID
   withParent (Just this) $ do
@@ -115,7 +115,7 @@ bProc (Procedure "when-received" params body vars lists) = do
 bProc (Procedure name params body vars lists) = do
   params' <-
     for params $ \case
-      Sym sym -> return sym
+      Sym sym -> pure sym
       _ -> throwError $ NonSymbolInProcDef name
   this <- newID
   withParent (Just this) $
@@ -176,7 +176,7 @@ bStmt (ProcCall procName args) =
       boil $ \this parent -> do
         exisitingProcs <- asks _envProcs
         paramIDs <-
-          maybe (throwError $ UnknownProc procName) (return . fmap snd) $
+          maybe (throwError $ UnknownProc procName) (pure . fmap snd) $
           lookup procName exisitingProcs
         next <- asks _envNext
         args' <- fmap emptyShadow <$> traverse bExpr args
@@ -202,7 +202,7 @@ bStmt (ProcCall procName args) =
                       ])
                 ])
           ]
-        return (Just this, Just this)
+        pure (Just this, Just this)
 bStmt (Do xs) = bStmts xs
 bStmt (IfElse cond true false) =
   boil $ \this parent -> do
@@ -238,7 +238,7 @@ bStmt (IfElse cond true false) =
                          ])
                    ])
              ]
-    return (Just this, Just this)
+    pure (Just this, Just this)
 bStmt (Repeat times body) =
   boil $ \this parent -> do
     times' <- emptyShadow <$> bExpr times
@@ -257,7 +257,7 @@ bStmt (Repeat times body) =
                   ])
             ])
       ]
-    return (Just this, Just this)
+    pure (Just this, Just this)
 bStmt (Forever body) =
   boil $ \this parent -> do
     (bodyID, _) <- withNext Nothing $ bStmts body
@@ -271,7 +271,7 @@ bStmt (Forever body) =
             , ("inputs", JObj [("SUBSTACK", JArr [JNum 2, idJSON bodyID])])
             ])
       ]
-    return (Just this, Just this)
+    pure (Just this, Just this)
 bStmt (Until cond body) =
   boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
@@ -290,7 +290,7 @@ bStmt (Until cond body) =
                   ])
             ])
       ]
-    return (Just this, Just this)
+    pure (Just this, Just this)
 bStmt (While cond body) =
   boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
@@ -309,7 +309,7 @@ bStmt (While cond body) =
                   ])
             ])
       ]
-    return (Just this, Just this)
+    pure (Just this, Just this)
 bStmt (For var times body) =
   boil $ \this parent -> do
     next <- asks _envNext
@@ -331,7 +331,7 @@ bStmt (For var times body) =
             , ("fields", JObj [("VARIABLE", var')])
             ])
       ]
-    return (Just this, Just this)
+    pure (Just this, Just this)
 
 builtinProcs :: [(T.Text, [Expr] -> Blocky (Maybe UID, Maybe UID))]
 builtinProcs =
@@ -359,7 +359,7 @@ builtinProcs =
             name' <-
               case name of
                 Lit lit ->
-                  return $
+                  pure $
                   JArr [JNum 1, JArr [JNum 11, JStr (toString lit), JStr ""]]
                 n -> noShadow <$> bExpr n
             tell
@@ -371,7 +371,7 @@ builtinProcs =
                     , ("inputs", JObj [("BROADCAST_INPUT", name')])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "send-broadcast-sync")
   , ( ":="
     , \case
@@ -390,7 +390,7 @@ builtinProcs =
                     , ("fields", JObj [("VARIABLE", variable')])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc ":=")
   , ( "+="
     , \case
@@ -409,7 +409,7 @@ builtinProcs =
                     , ("fields", JObj [("VARIABLE", variable')])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "+=")
   , ( "replace"
     , \case
@@ -429,7 +429,7 @@ builtinProcs =
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "replace")
   , ( "append"
     , \case
@@ -448,7 +448,7 @@ builtinProcs =
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "append")
   , ( "delete"
     , \case
@@ -467,7 +467,7 @@ builtinProcs =
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "delete")
   , ( "delete-all"
     , \case
@@ -484,7 +484,7 @@ builtinProcs =
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "delete-all")
   , ( "stop-all"
     , \case
@@ -501,7 +501,7 @@ builtinProcs =
                       , JObj [("STOP_OPTION", JArr [JStr "all", JNull])])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "stop-all")
   , ( "stop-this-script"
     , \case
@@ -518,7 +518,7 @@ builtinProcs =
                       , JObj [("STOP_OPTION", JArr [JStr "this script", JNull])])
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "stop-this-script")
   , ( "clone-myself"
     , \case
@@ -544,7 +544,7 @@ builtinProcs =
                     , ("shadow", JBool True)
                     ])
               ]
-            return (Just this, Just this)
+            pure (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "clone-myself")
   ]
   where
@@ -554,14 +554,14 @@ varField :: T.Text -> Blocky JValue
 varField name = do
   vars <- asks $ fold [_envLocalVars, _envSpriteVars, _envGlobalVars]
   case lookup name vars of
-    Just (varID, name') -> return $ JArr [JStr name', JStr varID]
+    Just (varID, name') -> pure $ JArr [JStr name', JStr varID]
     Nothing -> throwError $ VarDoesntExist name
 
 listField :: T.Text -> Blocky JValue
 listField name = do
   lists <- asks $ fold [_envLocalLists, _envSpriteLists, _envGlobalLists]
   case lookup name lists of
-    Just (listID, name') -> return $ JArr [JStr name', JStr listID]
+    Just (listID, name') -> pure $ JArr [JStr name', JStr listID]
     Nothing -> throwError $ ListDoesntExist name
 
 stackBlock ::
@@ -588,7 +588,7 @@ stackBlock opcode fieldFns procName args
               , ("inputs", JObj fields)
               ])
         ]
-      return (Just this, Just this)
+      pure (Just this, Just this)
 
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
 bStmts [] = asks $ (Nothing, ) . _envParent
@@ -600,10 +600,10 @@ bStmts (x:xs) = do
   (firstStart, firstEnd) <- withNext (Just next) $ bStmt x
   prependID next
   (_, restEnd) <- withParent firstEnd $ bStmts xs
-  return (firstStart, restEnd)
+  pure (firstStart, restEnd)
 
 bExpr :: Expr -> Blocky Reporter
-bExpr (Lit lit) = return $ Shadow $ JArr [JNum 10, JStr $ toString lit]
+bExpr (Lit lit) = pure $ Shadow $ JArr [JNum 10, JStr $ toString lit]
 bExpr (Sym sym) = do
   env <- ask
   let procArgs = _envProcArgs env
@@ -621,13 +621,13 @@ bExpr (Sym sym) = do
                   , ("fields", JObj [("VALUE", JArr [JStr sym, JNull])])
                   ])
             ]
-          return $ NonShadow $ JStr this
+          pure $ NonShadow $ JStr this
       theVar =
         lookup sym vars <&> \(i, name) ->
-          return $ NonShadow $ JArr [JNum 12, JStr name, JStr i]
+          pure $ NonShadow $ JArr [JNum 12, JStr name, JStr i]
       theList =
         lookup sym lists <&> \(i, name) ->
-          return $ NonShadow $ JArr [JNum 13, JStr name, JStr i]
+          pure $ NonShadow $ JArr [JNum 13, JStr name, JStr i]
       theBuiltin = lookup sym builtinSymbols
   fromMaybe err $
     getFirst $ foldMap First [theProcArg, theVar, theList, theBuiltin]
@@ -656,7 +656,7 @@ builtinFuncs =
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
-            return $ NonShadow $ JStr this
+            pure $ NonShadow $ JStr this
         args -> throwError $ FuncWrongArgCount "!!" (Exactly 2) $ length args)
   , ( "+"
     , let go [] = bExpr $ Lit $ VNum 0
@@ -673,7 +673,7 @@ builtinFuncs =
                       , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                       ])
                 ]
-              return $ NonShadow $ JStr this
+              pure $ NonShadow $ JStr this
        in go)
   , ( "-"
     , \case
@@ -691,7 +691,7 @@ builtinFuncs =
                     , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                     ])
               ]
-            return $ NonShadow $ JStr this)
+            pure $ NonShadow $ JStr this)
   , ( "*"
     , let go [] = bExpr $ Lit $ VNum 0
           go [x] = bExpr x
@@ -707,7 +707,7 @@ builtinFuncs =
                       , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                       ])
                 ]
-              return $ NonShadow $ JStr this
+              pure $ NonShadow $ JStr this
        in go)
   , ( "/"
     , \case
@@ -723,7 +723,7 @@ builtinFuncs =
                     , ("inputs", JObj [("NUM1", lhs'), ("NUM2", rhs')])
                     ])
               ]
-            return $ NonShadow $ JStr this
+            pure $ NonShadow $ JStr this
         args -> throwError $ FuncWrongArgCount "/" (AtLeast 2) $ length args)
   , ( "++"
     , let go [] = bExpr $ Lit $ VStr ""
@@ -740,7 +740,7 @@ builtinFuncs =
                       , ("inputs", JObj [("STRING1", lhs'), ("STRING2", rhs')])
                       ])
                 ]
-              return $ NonShadow $ JStr this
+              pure $ NonShadow $ JStr this
        in go)
   , ( "or"
     , let go [] = bExpr $ Lit $ VBool False
@@ -758,7 +758,7 @@ builtinFuncs =
                         , JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
                       ])
                 ]
-              return $ NonShadow $ JStr this
+              pure $ NonShadow $ JStr this
        in go)
   , ( "and"
     , let go [] = bExpr $ Lit $ VBool True
@@ -776,7 +776,7 @@ builtinFuncs =
                         , JObj [("OPERAND1", lhs'), ("OPERAND2", rhs')])
                       ])
                 ]
-              return $ NonShadow $ JStr this
+              pure $ NonShadow $ JStr this
        in go)
   , simpleOperator "=" "operator_equals" ["OPERAND1", "OPERAND2"]
   , simpleOperator "<" "operator_lt" ["OPERAND1", "OPERAND2"]
@@ -815,7 +815,7 @@ builtinFuncs =
                     , ("fields", JObj [("LIST", list')])
                     ])
               ]
-            return $ NonShadow $ JStr this
+            pure $ NonShadow $ JStr this
         args ->
           throwError $ FuncWrongArgCount "length" (Exactly 1) $ length args)
   ]
@@ -839,7 +839,7 @@ builtinFuncs =
                       , ("inputs", JObj $ zip inputs args')
                       ])
                 ]
-              return $ NonShadow $ JStr this
+              pure $ NonShadow $ JStr this
     mathOp :: T.Text -> T.Text -> (T.Text, [Expr] -> Blocky Reporter)
     mathOp name op =
       ( name
@@ -856,7 +856,7 @@ builtinFuncs =
                       , ("fields", JObj [("OPERATOR", JArr [JStr op, JNull])])
                       ])
                 ]
-              return $ NonShadow $ JStr this
+              pure $ NonShadow $ JStr this
           args -> throwError $ FuncWrongArgCount name (Exactly 1) (length args))
 
 builtinSymbols :: [(T.Text, Blocky Reporter)]
@@ -870,7 +870,7 @@ builtinSymbols =
     simpleSymbol opcode =
       boil $ \this parent -> do
         tell [(this, JObj [("opcode", JStr opcode), ("parent", idJSON parent)])]
-        return $ NonShadow $ JStr this
+        pure $ NonShadow $ JStr this
 
 withLocals :: [T.Text] -> [T.Text] -> Blocky a -> Blocky a
 withLocals vars lists comp = do

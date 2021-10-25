@@ -62,7 +62,7 @@ mkMacro =
     [LispNode name params, body] -> do
       name' <- maybeToRight NonSymbolMacroName $ getSym name
       params' <- maybeToRight (NonSymbolParam name') $ traverse getSym params
-      return $ mkFuncMacro name' params' body
+      pure $ mkFuncMacro name' params' body
     _ -> Left InvalidMacroDefinition
 
 mkFuncMacro :: T.Text -> [T.Text] -> LispAST -> Macro
@@ -105,7 +105,7 @@ expandList =
           mkMacro ast' <&> liftEither . left Error .
           fmap (\m' -> (getFirst . (First . macros <> First . m'), accum))
     let theInclude = include ast <&> (>>= expandList (macros, accum))
-    let theNormal = return (macros, accum ++ [ast'])
+    let theNormal = pure (macros, accum ++ [ast'])
     fromMaybe theNormal $ theMacro <|> theInclude
 
 expandMacros :: [LispAST] -> MacroM [LispAST]
@@ -123,6 +123,6 @@ builtinMacros =
         let maybeIncludes = maybeToRight . pure . pure <*> include <$> asts
         guard $ any isRight maybeIncludes
         let asts' = either id id <$> maybeIncludes
-        return $ LispNode fn . concat <$> sequenceA asts'
+        pure $ LispNode fn . concat <$> sequenceA asts'
       _ -> Nothing
   ]

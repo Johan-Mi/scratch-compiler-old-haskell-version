@@ -45,4 +45,4 @@ mkProgram asts = do
     case stages of
       [theStage] -> Right theStage
       _ -> Left NoStage
-  return $ Program stage' sprites'
+  pure $ Program stage' sprites'

@@ -25,10 +25,10 @@ newID = do
   case prepends of
     [] -> do
       put ([], counter + 1)
-      return $ T.append "id-" $ T.pack $ show counter
+      pure $ T.append "id-" $ T.pack $ show counter
     (x:xs) -> do
       put (xs, counter)
-      return x
+      pure x
 
 prependID :: MonadState UIDState m => UID -> m ()
 prependID = modify . first . (:)

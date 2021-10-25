@@ -78,7 +78,7 @@ projectJSON prg = do
   (targets', assetLists) <-
     unzip <$> traverse (spriteJSON env) (prg ^.. targets)
   let assets = concat assetLists
-  return (JObj [("meta", meta), ("targets", JArr targets')], assets)
+  pure (JObj [("meta", meta), ("targets", JArr targets')], assets)
 
 spriteJSON ::
      Env -> Sprite -> StateT UIDState (ExceptT BlockError IO) (JValue, [Asset])
@@ -89,7 +89,7 @@ spriteJSON env spr = do
   procs <-
     for (spr ^. procedures) $ \p -> do
       params <- for [s | Sym s <- p ^. procedureParams] $ \v -> (v, ) <$> newID
-      return (p ^. procedureName, params)
+      pure (p ^. procedureName, params)
   let env' =
         env
           { _envProcs = procs
@@ -101,7 +101,7 @@ spriteJSON env spr = do
     mapStateT
       hoistExcept
       (flip runReaderT env' $ traverse procToBlocks $ spr ^. procedures)
-  return
+  pure
     ( JObj
         [ ("name", JStr (spr ^. spriteName))
         , ("isStage", JBool (isStage spr))
