@@ -17,6 +17,7 @@ import Control.Monad.Reader (ReaderT, ask, asks, local)
 import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
+import Data.Foldable (fold)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, fromMaybe, isNothing)
 import Data.Monoid (First(..))
@@ -171,43 +172,40 @@ bStmt :: Statement -> Blocky (Maybe UID, Maybe UID)
 bStmt (ProcCall procName args) =
   case lookup procName builtinProcs of
     Just fn -> fn args
-    Nothing -> do
-      exisitingProcs <- asks _envProcs
-      paramIDs <-
-        maybe (throwError $ UnknownProc procName) (return . fmap snd) $
-        lookup procName exisitingProcs
-      this <- newID
-      next <- asks _envNext
-      parent <- asks _envParent
-      args' <- fmap emptyShadow <$> withParent (Just this) (traverse bExpr args)
-      let inputs = zip paramIDs args'
-      let proccode = T.append procName $ T.replicate (length args) " %s"
-      let argumentids =
-            toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
-      tell
-        [ ( this
-          , JObj
-              [ ("opcode", JStr "procedures_call")
-              , ("next", idJSON next)
-              , ("parent", idJSON parent)
-              , ("inputs", JObj inputs)
-              , ("fields", JObj [])
-              , ( "mutation"
-                , JObj
-                    [ ("tagName", JStr "mutation")
-                    , ("children", JArr [])
-                    , ("proccode", JStr proccode)
-                    , ("argumentids", JStr argumentids)
-                    , ("warp", JStr "true")
-                    ])
-              ])
-        ]
-      return (Just this, Just this)
+    Nothing ->
+      boil $ \this parent -> do
+        exisitingProcs <- asks _envProcs
+        paramIDs <-
+          maybe (throwError $ UnknownProc procName) (return . fmap snd) $
+          lookup procName exisitingProcs
+        next <- asks _envNext
+        args' <- fmap emptyShadow <$> traverse bExpr args
+        let inputs = zip paramIDs args'
+        let proccode = T.append procName $ T.replicate (length args) " %s"
+        let argumentids =
+              toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
+        tell
+          [ ( this
+            , JObj
+                [ ("opcode", JStr "procedures_call")
+                , ("next", idJSON next)
+                , ("parent", idJSON parent)
+                , ("inputs", JObj inputs)
+                , ("fields", JObj [])
+                , ( "mutation"
+                  , JObj
+                      [ ("tagName", JStr "mutation")
+                      , ("children", JArr [])
+                      , ("proccode", JStr proccode)
+                      , ("argumentids", JStr argumentids)
+                      , ("warp", JStr "true")
+                      ])
+                ])
+          ]
+        return (Just this, Just this)
 bStmt (Do xs) = bStmts xs
-bStmt (IfElse cond true false) = do
-  this <- newID
-  parent <- asks _envParent
-  withParent (Just this) $ do
+bStmt (IfElse cond true false) =
+  boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
     (trueID, _) <- withNext Nothing $ bStmt true
     (falseID, _) <- withNext Nothing $ bStmt false
@@ -241,10 +239,8 @@ bStmt (IfElse cond true false) = do
                    ])
              ]
     return (Just this, Just this)
-bStmt (Repeat times body) = do
-  this <- newID
-  parent <- asks _envParent
-  withParent (Just this) $ do
+bStmt (Repeat times body) =
+  boil $ \this parent -> do
     times' <- emptyShadow <$> bExpr times
     (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
@@ -262,10 +258,8 @@ bStmt (Repeat times body) = do
             ])
       ]
     return (Just this, Just this)
-bStmt (Forever body) = do
-  this <- newID
-  parent <- asks _envParent
-  withParent (Just this) $ do
+bStmt (Forever body) =
+  boil $ \this parent -> do
     (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
     tell
@@ -278,10 +272,8 @@ bStmt (Forever body) = do
             ])
       ]
     return (Just this, Just this)
-bStmt (Until cond body) = do
-  this <- newID
-  parent <- asks _envParent
-  withParent (Just this) $ do
+bStmt (Until cond body) =
+  boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
     (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
@@ -299,10 +291,8 @@ bStmt (Until cond body) = do
             ])
       ]
     return (Just this, Just this)
-bStmt (While cond body) = do
-  this <- newID
-  parent <- asks _envParent
-  withParent (Just this) $ do
+bStmt (While cond body) =
+  boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
     (bodyID, _) <- withNext Nothing $ bStmts body
     next <- asks _envNext
@@ -320,11 +310,9 @@ bStmt (While cond body) = do
             ])
       ]
     return (Just this, Just this)
-bStmt (For var times body) = do
-  this <- newID
-  parent <- asks _envParent
-  next <- asks _envNext
-  withParent (Just this) $ do
+bStmt (For var times body) =
+  boil $ \this parent -> do
+    next <- asks _envNext
     var' <-
       case var of
         Sym sym -> varField sym
@@ -365,75 +353,70 @@ builtinProcs =
    ]) ++
   [ ( "send-broadcast-sync"
     , \case
-        [name] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          name' <-
-            case name of
-              Lit lit ->
-                return $
-                JArr [JNum 1, JArr [JNum 11, JStr (toString lit), JStr ""]]
-              n -> noShadow <$> withParent (Just this) (bExpr n)
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "event_broadcastandwait")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ("inputs", JObj [("BROADCAST_INPUT", name')])
-                  ])
-            ]
-          return (Just this, Just this)
+        [name] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            name' <-
+              case name of
+                Lit lit ->
+                  return $
+                  JArr [JNum 1, JArr [JNum 11, JStr (toString lit), JStr ""]]
+                n -> noShadow <$> bExpr n
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "event_broadcastandwait")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ("inputs", JObj [("BROADCAST_INPUT", name')])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "send-broadcast-sync")
   , ( ":="
     , \case
-        [Sym varName, value] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          variable' <- varField varName
-          value' <- emptyShadow <$> withParent (Just this) (bExpr value)
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "data_setvariableto")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ("inputs", JObj [("VALUE", value')])
-                  , ("fields", JObj [("VARIABLE", variable')])
-                  ])
-            ]
-          return (Just this, Just this)
+        [Sym varName, value] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            variable' <- varField varName
+            value' <- emptyShadow <$> bExpr value
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "data_setvariableto")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ("inputs", JObj [("VALUE", value')])
+                    , ("fields", JObj [("VARIABLE", variable')])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc ":=")
   , ( "+="
     , \case
-        [Sym varName, value] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          variable' <- varField varName
-          value' <- emptyShadow <$> withParent (Just this) (bExpr value)
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "data_changevariableby")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ("inputs", JObj [("VALUE", value')])
-                  , ("fields", JObj [("VARIABLE", variable')])
-                  ])
-            ]
-          return (Just this, Just this)
+        [Sym varName, value] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            variable' <- varField varName
+            value' <- emptyShadow <$> bExpr value
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "data_changevariableby")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ("inputs", JObj [("VALUE", value')])
+                    , ("fields", JObj [("VARIABLE", variable')])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "+=")
   , ( "replace"
     , \case
-        [Sym listName, index, item] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          list' <- listField listName
-          withParent (Just this) $ do
+        [Sym listName, index, item] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            list' <- listField listName
             index' <- emptyShadow <$> withParent (Just this) (bExpr index)
             item' <- emptyShadow <$> bExpr item
             tell
@@ -450,123 +433,118 @@ builtinProcs =
         _ -> throwError $ InvalidArgsForBuiltinProc "replace")
   , ( "append"
     , \case
-        [Sym listName, value] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          list' <- listField listName
-          value' <- emptyShadow <$> withParent (Just this) (bExpr value)
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "data_addtolist")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ("inputs", JObj [("ITEM", value')])
-                  , ("fields", JObj [("LIST", list')])
-                  ])
-            ]
-          return (Just this, Just this)
+        [Sym listName, value] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            list' <- listField listName
+            value' <- emptyShadow <$> bExpr value
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "data_addtolist")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ("inputs", JObj [("ITEM", value')])
+                    , ("fields", JObj [("LIST", list')])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "append")
   , ( "delete"
     , \case
-        [Sym listName, index] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          list' <- listField listName
-          index' <- emptyShadow <$> withParent (Just this) (bExpr index)
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "data_deleteoflist")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ("inputs", JObj [("INDEX", index')])
-                  , ("fields", JObj [("LIST", list')])
-                  ])
-            ]
-          return (Just this, Just this)
+        [Sym listName, index] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            list' <- listField listName
+            index' <- emptyShadow <$> bExpr index
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "data_deleteoflist")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ("inputs", JObj [("INDEX", index')])
+                    , ("fields", JObj [("LIST", list')])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "delete")
   , ( "delete-all"
     , \case
-        [Sym listName] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          list' <- listField listName
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "data_deletealloflist")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ("fields", JObj [("LIST", list')])
-                  ])
-            ]
-          return (Just this, Just this)
+        [Sym listName] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            list' <- listField listName
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "data_deletealloflist")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ("fields", JObj [("LIST", list')])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "delete-all")
   , ( "stop-all"
     , \case
-        [] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "control_stop")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ("fields", JObj [("STOP_OPTION", JArr [JStr "all", JNull])])
-                  ])
-            ]
-          return (Just this, Just this)
+        [] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "control_stop")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ( "fields"
+                      , JObj [("STOP_OPTION", JArr [JStr "all", JNull])])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "stop-all")
   , ( "stop-this-script"
     , \case
-        [] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "control_stop")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ( "fields"
-                    , JObj [("STOP_OPTION", JArr [JStr "this script", JNull])])
-                  ])
-            ]
-          return (Just this, Just this)
+        [] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "control_stop")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ( "fields"
+                      , JObj [("STOP_OPTION", JArr [JStr "this script", JNull])])
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "stop-this-script")
   , ( "clone-myself"
     , \case
-        [] -> do
-          this <- newID
-          next <- asks _envNext
-          parent <- asks _envParent
-          menu <- newID
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "control_create_clone_of")
-                  , ("next", idJSON next)
-                  , ("parent", idJSON parent)
-                  , ( "inputs"
-                    , JObj [("CLONE_OPTION", JArr [JNum 1, JStr menu])])
-                  ])
-            , ( menu
-              , JObj
-                  [ ("opcode", JStr "control_create_clone_of_menu")
-                  , ("parent", JStr this)
-                  , ( "fields"
-                    , JObj [("CLONE_OPTION", JArr [JStr "_myself_", JNull])])
-                  , ("shadow", JBool True)
-                  ])
-            ]
-          return (Just this, Just this)
+        [] ->
+          boil $ \this parent -> do
+            next <- asks _envNext
+            menu <- newID
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "control_create_clone_of")
+                    , ("next", idJSON next)
+                    , ("parent", idJSON parent)
+                    , ( "inputs"
+                      , JObj [("CLONE_OPTION", JArr [JNum 1, JStr menu])])
+                    ])
+              , ( menu
+                , JObj
+                    [ ("opcode", JStr "control_create_clone_of_menu")
+                    , ("parent", JStr this)
+                    , ( "fields"
+                      , JObj [("CLONE_OPTION", JArr [JStr "_myself_", JNull])])
+                    , ("shadow", JBool True)
+                    ])
+              ]
+            return (Just this, Just this)
         _ -> throwError $ InvalidArgsForBuiltinProc "clone-myself")
   ]
   where
@@ -574,20 +552,14 @@ builtinProcs =
 
 varField :: T.Text -> Blocky JValue
 varField name = do
-  localVars <- asks _envLocalVars
-  spriteVars <- asks _envSpriteVars
-  globalVars <- asks _envGlobalVars
-  let vars = localVars ++ spriteVars ++ globalVars
+  vars <- asks $ fold [_envLocalVars, _envSpriteVars, _envGlobalVars]
   case lookup name vars of
     Just (varID, name') -> return $ JArr [JStr name', JStr varID]
     Nothing -> throwError $ VarDoesntExist name
 
 listField :: T.Text -> Blocky JValue
 listField name = do
-  localLists <- asks _envLocalLists
-  spriteLists <- asks _envSpriteLists
-  globalLists <- asks _envGlobalLists
-  let lists = localLists ++ spriteLists ++ globalLists
+  lists <- asks $ fold [_envLocalLists, _envSpriteLists, _envGlobalLists]
   case lookup name lists of
     Just (listID, name') -> return $ JArr [JStr name', JStr listID]
     Nothing -> throwError $ ListDoesntExist name
@@ -601,23 +573,22 @@ stackBlock ::
 stackBlock opcode fieldFns procName args
   | length args /= length fieldFns =
     throwError $ InvalidArgsForBuiltinProc procName
-  | otherwise = do
-    let (fieldNames, fns) = unzip fieldFns
-    this <- newID
-    next <- asks _envNext
-    parent <- asks _envParent
-    fieldVals <- withParent (Just this) $ zipWithM ($) fns args
-    let fields = zip fieldNames fieldVals
-    tell
-      [ ( this
-        , JObj
-            [ ("opcode", JStr opcode)
-            , ("next", idJSON next)
-            , ("parent", idJSON parent)
-            , ("inputs", JObj fields)
-            ])
-      ]
-    return (Just this, Just this)
+  | otherwise =
+    boil $ \this parent -> do
+      let (fieldNames, fns) = unzip fieldFns
+      next <- asks _envNext
+      fieldVals <- zipWithM ($) fns args
+      let fields = zip fieldNames fieldVals
+      tell
+        [ ( this
+          , JObj
+              [ ("opcode", JStr opcode)
+              , ("next", idJSON next)
+              , ("parent", idJSON parent)
+              , ("inputs", JObj fields)
+              ])
+        ]
+      return (Just this, Just this)
 
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
 bStmts [] = asks $ (Nothing, ) . _envParent
@@ -636,8 +607,8 @@ bExpr (Lit lit) = return $ Shadow $ JArr [JNum 10, JStr $ toString lit]
 bExpr (Sym sym) = do
   env <- ask
   let procArgs = _envProcArgs env
-      vars = _envLocalVars env ++ _envSpriteVars env ++ _envGlobalVars env
-      lists = _envLocalLists env ++ _envSpriteLists env ++ _envGlobalLists env
+      vars = fold [_envLocalVars, _envSpriteVars, _envGlobalVars] env
+      lists = fold [_envLocalLists, _envSpriteLists, _envGlobalLists] env
       theProcArg =
         guard (sym `elem` procArgs) $> do
           this <- newID
@@ -669,10 +640,8 @@ builtinFuncs :: [(T.Text, [Expr] -> Blocky Reporter)]
 builtinFuncs =
   [ ( "!!"
     , \case
-        [list, index] -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
+        [list, index] ->
+          boil $ \this parent -> do
             list' <-
               case list of
                 Sym sym -> listField sym
@@ -692,10 +661,8 @@ builtinFuncs =
   , ( "+"
     , let go [] = bExpr $ Lit $ VNum 0
           go [x] = bExpr x
-          go (lhs:rhs) = do
-            this <- newID
-            parent <- asks _envParent
-            withParent (Just this) $ do
+          go (lhs:rhs) =
+            boil $ \this parent -> do
               lhs' <- emptyShadow <$> bExpr lhs
               rhs' <- emptyShadow <$> go rhs
               tell
@@ -712,10 +679,8 @@ builtinFuncs =
     , \case
         [] -> throwError $ FuncWrongArgCount "-" (AtLeast 1) 0
         [x] -> bExpr (FuncCall "-" [Lit (VNum 0), x])
-        (lhs:rhs) -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
+        (lhs:rhs) ->
+          boil $ \this parent -> do
             lhs' <- emptyShadow <$> bExpr lhs
             rhs' <- emptyShadow <$> bExpr (FuncCall "+" rhs)
             tell
@@ -730,10 +695,8 @@ builtinFuncs =
   , ( "*"
     , let go [] = bExpr $ Lit $ VNum 0
           go [x] = bExpr x
-          go (lhs:rhs) = do
-            this <- newID
-            parent <- asks _envParent
-            withParent (Just this) $ do
+          go (lhs:rhs) =
+            boil $ \this parent -> do
               lhs' <- emptyShadow <$> bExpr lhs
               rhs' <- emptyShadow <$> go rhs
               tell
@@ -748,10 +711,8 @@ builtinFuncs =
        in go)
   , ( "/"
     , \case
-        (lhs:rhs@(_:_)) -> do
-          this <- newID
-          parent <- asks _envParent
-          withParent (Just this) $ do
+        (lhs:rhs@(_:_)) ->
+          boil $ \this parent -> do
             lhs' <- emptyShadow <$> bExpr lhs
             rhs' <- emptyShadow <$> bExpr (FuncCall "*" rhs)
             tell
@@ -767,10 +728,8 @@ builtinFuncs =
   , ( "++"
     , let go [] = bExpr $ Lit $ VStr ""
           go [x] = bExpr x
-          go (lhs:rhs) = do
-            this <- newID
-            parent <- asks _envParent
-            withParent (Just this) $ do
+          go (lhs:rhs) =
+            boil $ \this parent -> do
               lhs' <- emptyShadow <$> bExpr lhs
               rhs' <- emptyShadow <$> go rhs
               tell
@@ -786,10 +745,8 @@ builtinFuncs =
   , ( "or"
     , let go [] = bExpr $ Lit $ VBool False
           go [x] = bExpr x
-          go (lhs:rhs) = do
-            this <- newID
-            parent <- asks _envParent
-            withParent (Just this) $ do
+          go (lhs:rhs) =
+            boil $ \this parent -> do
               lhs' <- emptyShadow <$> bExpr lhs
               rhs' <- emptyShadow <$> go rhs
               tell
@@ -806,10 +763,8 @@ builtinFuncs =
   , ( "and"
     , let go [] = bExpr $ Lit $ VBool True
           go [x] = bExpr x
-          go (lhs:rhs) = do
-            this <- newID
-            parent <- asks _envParent
-            withParent (Just this) $ do
+          go (lhs:rhs) =
+            boil $ \this parent -> do
               lhs' <- emptyShadow <$> bExpr lhs
               rhs' <- emptyShadow <$> go rhs
               tell
@@ -846,22 +801,21 @@ builtinFuncs =
   , mathOp "atan" "atan"
   , ( "length"
     , \case
-        [listName] -> do
-          this <- newID
-          parent <- asks _envParent
-          list' <-
-            case listName of
-              Sym sym -> listField sym
-              _ -> throwError $ InvalidArgsForBuiltinFunc "length"
-          tell
-            [ ( this
-              , JObj
-                  [ ("opcode", JStr "data_lengthoflist")
-                  , ("parent", idJSON parent)
-                  , ("fields", JObj [("LIST", list')])
-                  ])
-            ]
-          return $ NonShadow $ JStr this
+        [listName] ->
+          boil $ \this parent -> do
+            list' <-
+              case listName of
+                Sym sym -> listField sym
+                _ -> throwError $ InvalidArgsForBuiltinFunc "length"
+            tell
+              [ ( this
+                , JObj
+                    [ ("opcode", JStr "data_lengthoflist")
+                    , ("parent", idJSON parent)
+                    , ("fields", JObj [("LIST", list')])
+                    ])
+              ]
+            return $ NonShadow $ JStr this
         args ->
           throwError $ FuncWrongArgCount "length" (Exactly 1) $ length args)
   ]
@@ -874,10 +828,8 @@ builtinFuncs =
           | length args /= length inputs =
             throwError $
             FuncWrongArgCount name (Exactly $ length inputs) $ length args
-          | otherwise = do
-            this <- newID
-            parent <- asks _envParent
-            withParent (Just this) $ do
+          | otherwise =
+            boil $ \this parent -> do
               args' <- fmap emptyShadow <$> traverse bExpr args
               tell
                 [ ( this
@@ -892,20 +844,19 @@ builtinFuncs =
     mathOp name op =
       ( name
       , \case
-          [num] -> do
-            this <- newID
-            parent <- asks _envParent
-            num' <- fmap emptyShadow $ withParent (Just this) $ bExpr num
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "operator_mathop")
-                    , ("parent", idJSON parent)
-                    , ("inputs", JObj [("NUM", num')])
-                    , ("fields", JObj [("OPERATOR", JArr [JStr op, JNull])])
-                    ])
-              ]
-            return $ NonShadow $ JStr this
+          [num] ->
+            boil $ \this parent -> do
+              num' <- emptyShadow <$> bExpr num
+              tell
+                [ ( this
+                  , JObj
+                      [ ("opcode", JStr "operator_mathop")
+                      , ("parent", idJSON parent)
+                      , ("inputs", JObj [("NUM", num')])
+                      , ("fields", JObj [("OPERATOR", JArr [JStr op, JNull])])
+                      ])
+                ]
+              return $ NonShadow $ JStr this
           args -> throwError $ FuncWrongArgCount name (Exactly 1) (length args))
 
 builtinSymbols :: [(T.Text, Blocky Reporter)]
@@ -916,11 +867,10 @@ builtinSymbols =
   ]
   where
     simpleSymbol :: T.Text -> Blocky Reporter
-    simpleSymbol opcode = do
-      this <- newID
-      parent <- asks _envParent
-      tell [(this, JObj [("opcode", JStr opcode), ("parent", idJSON parent)])]
-      return $ NonShadow $ JStr this
+    simpleSymbol opcode =
+      boil $ \this parent -> do
+        tell [(this, JObj [("opcode", JStr opcode), ("parent", idJSON parent)])]
+        return $ NonShadow $ JStr this
 
 withLocals :: [T.Text] -> [T.Text] -> Blocky a -> Blocky a
 withLocals vars lists comp = do
@@ -929,3 +879,10 @@ withLocals vars lists comp = do
   local (\env -> env {_envLocalVars = vars', _envLocalLists = lists'}) comp
   where
     mangle v i = "local " <> i <> " " <> v
+
+-- Boilerplate to provide `this` and `parent` to a blocky computation
+boil :: (UID -> Maybe UID -> Blocky a) -> Blocky a
+boil computation = do
+  this <- newID
+  parent <- asks _envParent
+  withParent (Just this) $ computation this parent

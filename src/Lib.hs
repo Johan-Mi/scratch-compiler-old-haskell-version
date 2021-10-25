@@ -7,7 +7,7 @@ import Control.Monad ((<=<))
 import Control.Monad.Except (liftEither, liftIO, runExceptT, withExceptT)
 import Macro (expandMacros)
 import Mid (mkProgram)
-import Optimize (optimize)
+import Optimize (optimizeProgram)
 import Parser (programP)
 import SB3 (writeSB3File)
 import Text.Parsec.Text (parseFromFile)
@@ -18,5 +18,5 @@ compileProgram path =
     parsed <- liftEither . left print =<< liftIO (parseFromFile programP path)
     expanded <- withExceptT print $ expandMacros parsed
     prg <- liftEither $ left print $ mkProgram expanded
-    let optimized = optimize prg
+    let optimized = optimizeProgram prg
     withExceptT print $ writeSB3File optimized
