@@ -3,6 +3,7 @@ module LispAST
   , isTheFunction
   , asTheFunction
   , getSym
+  , getStr
   , subTrees
   ) where
 
@@ -39,6 +40,10 @@ asTheFunction _ _ _ = Nothing
 getSym :: LispAST -> Maybe T.Text
 getSym (LispSym sym) = Just sym
 getSym _ = Nothing
+
+getStr :: LispAST -> Maybe T.Text
+getStr (LispString str) = Just str
+getStr _ = Nothing
 
 subTrees :: Traversal' LispAST LispAST
 subTrees _ ast@(LispNum _) = pure ast

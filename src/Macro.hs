@@ -15,7 +15,7 @@ import Data.Maybe (fromMaybe)
 import Data.Monoid (First(..))
 import qualified Data.Text as T
 import Error (Error(..), IsError)
-import LispAST (LispAST(..), asTheFunction, getSym, subTrees)
+import LispAST (LispAST(..), asTheFunction, getStr, getSym, subTrees)
 import Parser (programP)
 import Text.Parsec.Text (parseFromFile)
 import Text.Printf (printf)
@@ -117,6 +117,10 @@ builtinMacros =
   [ \case
       (LispNode (LispSym "sym-concat!") args) ->
         pure . LispSym . T.concat <$> traverse getSym args
+      _ -> Nothing
+  , \case
+      (LispNode (LispSym "str-concat!") args) ->
+        pure . LispString . T.concat <$> traverse getStr args
       _ -> Nothing
   , \case
       (LispNode fn asts) -> do
