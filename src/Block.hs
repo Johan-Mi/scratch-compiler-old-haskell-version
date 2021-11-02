@@ -792,7 +792,7 @@ builtinFuncs =
   , mathOp "ln" "ln"
   , mathOp "log" "log"
   , mathOp "e^" "e ^"
-  , mathOp "10^" "10 ^"
+  , mathOp "ten^" "10 ^"
   , mathOp "sin" "sin"
   , mathOp "cos" "cos"
   , mathOp "tan" "tan"
