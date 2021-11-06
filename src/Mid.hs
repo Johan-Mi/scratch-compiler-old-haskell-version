@@ -2,7 +2,6 @@ module Mid
   ( Program
   , mkProgram
   , stage
-  , sprites
   , targets
   ) where
 
@@ -24,9 +23,6 @@ data Program =
 
 stage :: Lens' Program Sprite
 stage f prg = (\sc -> prg {_stage = sc}) <$> f (_stage prg)
-
-sprites :: Lens' Program [Sprite]
-sprites f prg = (\spr -> prg {_sprites = spr}) <$> f (_sprites prg)
 
 targets :: Traversal' Program Sprite
 targets f prg =
