@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Optimizations
   ( exprOptimizations
@@ -46,8 +47,7 @@ constAnd (FuncCall "and" args)
   | not $ null known = Just $ FuncCall "and" unknown
   | otherwise = Nothing
   where
-    (unknown, known') = partitionMaybe getLit args
-    known = toBool <$> known'
+    (unknown, fmap toBool -> known) = partitionMaybe getLit args
 constAnd _ = Nothing
 
 -- Constant folding for `or`
@@ -58,8 +58,7 @@ constOr (FuncCall "or" args)
   | not $ null known = Just $ FuncCall "or" unknown
   | otherwise = Nothing
   where
-    (unknown, known') = partitionMaybe getLit args
-    known = toBool <$> known'
+    (unknown, fmap toBool -> known) = partitionMaybe getLit args
 constOr _ = Nothing
 
 -- Constant folding for `+`
@@ -69,8 +68,7 @@ constPlus (FuncCall "+" args)
   | length known > 1 = Just $ FuncCall "+" $ knownSum : unknown
   | otherwise = Nothing
   where
-    (unknown, known') = partitionMaybe getLit args
-    known = toNum <$> known'
+    (unknown, fmap toNum -> known) = partitionMaybe getLit args
     knownSum = Lit $ VNum $ sum known
 constPlus _ = Nothing
 

@@ -7,7 +7,7 @@ module Macro
 
 import Control.Applicative ((<|>))
 import Control.Arrow (left)
-import Control.Monad (foldM, guard)
+import Control.Monad ((>=>), foldM, guard)
 import Control.Monad.Except (ExceptT(..), liftEither, throwError)
 import Data.Either (isRight)
 import Data.Functor ((<&>))
@@ -28,7 +28,6 @@ data MacroError
   | UnknownMetaVar T.Text T.Text
   | InvalidArgsForInclude
   | InvalidMacroDefinition -- Very unspecific, TODO: Better errors
-  deriving (Eq)
 
 instance Show MacroError where
   show (WrongArgCount name expected got) =
@@ -88,7 +87,7 @@ subst name mvars = go
 expand :: Macro -> LispAST -> MacroM LispAST
 expand m = go
   where
-    go ast = subTrees go ast >>= \ast' -> maybe (pure ast') (>>= go) $ m ast'
+    go = subTrees go >=> \ast' -> maybe (pure ast') (>>= go) $ m ast'
 
 include :: LispAST -> Maybe (MacroM [LispAST])
 include =
@@ -104,8 +103,8 @@ expandList =
     let theMacro =
           mkMacro ast' <&> liftEither . left Error .
           fmap (\m' -> (getFirst . (First . macros <> First . m'), accum))
-    let theInclude = include ast <&> (>>= expandList (macros, accum))
-    let theNormal = pure (macros, accum ++ [ast'])
+        theInclude = include ast <&> (>>= expandList (macros, accum))
+        theNormal = pure (macros, accum ++ [ast'])
     fromMaybe theNormal $ theMacro <|> theInclude
 
 expandMacros :: [LispAST] -> MacroM [LispAST]
