@@ -5,12 +5,13 @@ module Optimizations
   , stmtOptimizations
   ) where
 
-import Mid.Expr (Expr(..), Value(..), getLit, toBool)
+import Mid.Expr (Expr(..), Value(..), getLit, toBool, toNum)
 import Mid.Proc (Statement(..))
 import Utils.Maybe (partitionMaybe)
 
 exprOptimizations :: [Expr -> Maybe Expr]
-exprOptimizations = [notNot, deMorgan, constNot, constAnd, constOr]
+exprOptimizations =
+  [notNot, deMorgan, constNot, constAnd, constOr, constPlus, constMinus]
 
 stmtOptimizations :: [Statement -> Maybe Statement]
 stmtOptimizations =
@@ -60,6 +61,27 @@ constOr (FuncCall "or" args)
     (unknown, known') = partitionMaybe getLit args
     known = toBool <$> known'
 constOr _ = Nothing
+
+-- Constant folding for `+`
+constPlus :: Expr -> Maybe Expr
+constPlus (FuncCall "+" args)
+  | null unknown = Just knownSum
+  | length known > 1 = Just $ FuncCall "+" $ knownSum : unknown
+  | otherwise = Nothing
+  where
+    (unknown, known') = partitionMaybe getLit args
+    known = toNum <$> known'
+    knownSum = Lit $ VNum $ sum known
+constPlus _ = Nothing
+
+-- Constant folding for `-`
+constMinus :: Expr -> Maybe Expr
+constMinus (FuncCall "-" [x]) = Lit . VNum . negate . toNum <$> getLit x
+constMinus (FuncCall "-" (x:xs))
+  | Just x' <- getLit x
+  , Just xs' <- traverse getLit xs =
+    Just $ Lit $ VNum $ toNum x' - sum (toNum <$> xs')
+constMinus _ = Nothing
 
 -- Flatten `Do` blocks
 flattenDo :: Statement -> Maybe Statement
