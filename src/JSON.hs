@@ -46,7 +46,6 @@ showJSON = B.toLazyByteString . go
 escape :: Char -> T.Text
 escape '"' = "\\\""
 escape '\\' = "\\\\"
-escape '/' = "\\/"
 escape '\b' = "\\b"
 escape '\f' = "\\f"
 escape '\n' = "\\n"
