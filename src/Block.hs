@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecursiveDo #-}
 
 module Block
   ( Env(..)
@@ -28,7 +29,7 @@ import Data.Traversable (for)
 import JSON (JValue(..), showJSON)
 import Mid.Expr (Expr(..), Value(..), toString)
 import Mid.Proc (Procedure(..), Statement(..))
-import UID (UID, UIDState, idJSON, newID, prependID)
+import UID (UID, UIDState, idJSON, newID)
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
 
@@ -593,14 +594,10 @@ stackBlock opcode fieldFns procName args
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
 bStmts [] = asks $ (Nothing, ) . _envParent
 bStmts [x] = bStmt x
-bStmts (x:xs) = do
-  this <- newID
-  next <- newID
-  prependID this
-  (firstStart, firstEnd) <- withNext (Just next) $ bStmt x
-  prependID next
-  (_, restEnd) <- withParent firstEnd $ bStmts xs
-  pure (firstStart, restEnd)
+bStmts (x:xs) =
+  mdo (firstStart, firstEnd) <- withNext restStart $ bStmt x
+      (restStart, restEnd) <- withParent firstEnd $ bStmts xs
+      pure (firstStart, restEnd)
 
 bExpr :: Expr -> Blocky Reporter
 bExpr (Lit lit) = pure $ Shadow $ JArr [JNum 10, JStr $ toString lit]
