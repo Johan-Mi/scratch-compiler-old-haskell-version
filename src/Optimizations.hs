@@ -6,6 +6,7 @@ module Optimizations
   , stmtOptimizations
   ) where
 
+import Data.Semigroup (Any(..))
 import Mid.Expr (Expr(..), Value(..), getLit, toBool, toNum)
 import Mid.Proc (Statement(..))
 import Utils.Maybe (partitionMaybe)
@@ -83,7 +84,13 @@ constMinus _ = Nothing
 
 -- Flatten `Do` blocks
 flattenDo :: Statement -> Maybe Statement
-flattenDo (Do [stmt]) = Just stmt
+flattenDo (Do body)
+  | getAny didSomething = Just $ Do flattened
+  | otherwise = Nothing
+  where
+    flatten (Do xs) = (Any True, xs)
+    flatten x = (Any False, [x])
+    (didSomething, flattened) = concat <$> traverse flatten body
 flattenDo _ = Nothing
 
 -- Remove if statements with a constant condition

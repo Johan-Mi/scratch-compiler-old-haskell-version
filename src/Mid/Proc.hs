@@ -65,11 +65,11 @@ data Statement
   = ProcCall T.Text [Expr]
   | Do [Statement]
   | IfElse Expr Statement Statement
-  | Repeat Expr [Statement]
-  | Forever [Statement]
-  | Until Expr [Statement]
-  | While Expr [Statement]
-  | For Expr Expr [Statement]
+  | Repeat Expr Statement
+  | Forever Statement
+  | Until Expr Statement
+  | While Expr Statement
+  | For Expr Expr Statement
   deriving (Show)
 
 mkStatement :: LispAST -> Either MidError Statement
@@ -102,23 +102,26 @@ stmtDo :: [LispAST] -> Either MidError Statement
 stmtDo = fmap Do . traverse mkStatement
 
 stmtRepeat :: [LispAST] -> Either MidError Statement
-stmtRepeat (times:body) = Repeat <$> mkExpr times <*> traverse mkStatement body
+stmtRepeat (times:body) =
+  Repeat <$> mkExpr times <*> (Do <$> traverse mkStatement body)
 stmtRepeat _ = Left $ InvalidArgumentsFor "repeat"
 
 stmtForever :: [LispAST] -> Either MidError Statement
-stmtForever = fmap Forever . traverse mkStatement
+stmtForever = fmap (Forever . Do) . traverse mkStatement
 
 stmtUntil :: [LispAST] -> Either MidError Statement
-stmtUntil (cond:body) = Until <$> mkExpr cond <*> traverse mkStatement body
+stmtUntil (cond:body) =
+  Until <$> mkExpr cond <*> (Do <$> traverse mkStatement body)
 stmtUntil _ = Left $ InvalidArgumentsFor "until"
 
 stmtWhile :: [LispAST] -> Either MidError Statement
-stmtWhile (cond:body) = While <$> mkExpr cond <*> traverse mkStatement body
+stmtWhile (cond:body) =
+  While <$> mkExpr cond <*> (Do <$> traverse mkStatement body)
 stmtWhile _ = Left $ InvalidArgumentsFor "while"
 
 stmtFor :: [LispAST] -> Either MidError Statement
 stmtFor (var:times:body) =
-  For <$> mkExpr var <*> mkExpr times <*> traverse mkStatement body
+  For <$> mkExpr var <*> mkExpr times <*> (Do <$> traverse mkStatement body)
 stmtFor _ = Left $ InvalidArgumentsFor "for"
 
 stmtWhen :: [LispAST] -> Either MidError Statement
@@ -143,11 +146,11 @@ subStmts :: Traversal' Statement Statement
 subStmts _ pc@(ProcCall _ _) = pure pc
 subStmts f (Do stmts) = Do <$> traverse f stmts
 subStmts f (IfElse cond true false) = IfElse cond <$> f true <*> f false
-subStmts f (Repeat times body) = Repeat times <$> traverse f body
-subStmts f (Forever body) = Forever <$> traverse f body
-subStmts f (Until cond body) = Until cond <$> traverse f body
-subStmts f (While cond body) = While cond <$> traverse f body
-subStmts f (For var times body) = For var times <$> traverse f body
+subStmts f (Repeat times body) = Repeat times <$> f body
+subStmts f (Forever body) = Forever <$> f body
+subStmts f (Until cond body) = Until cond <$> f body
+subStmts f (While cond body) = While cond <$> f body
+subStmts f (For var times body) = For var times <$> f body
 
 stmtExprs :: Traversal' Statement Expr
 stmtExprs f stmt =

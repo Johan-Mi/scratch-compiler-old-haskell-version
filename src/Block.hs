@@ -242,7 +242,7 @@ bStmt (IfElse cond true false) =
 bStmt (Repeat times body) =
   boil $ \this parent -> do
     times' <- emptyShadow <$> bExpr times
-    (bodyID, _) <- withNext Nothing $ bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmt body
     next <- asks _envNext
     tell
       [ ( this
@@ -260,7 +260,7 @@ bStmt (Repeat times body) =
     pure (Just this, Just this)
 bStmt (Forever body) =
   boil $ \this parent -> do
-    (bodyID, _) <- withNext Nothing $ bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmt body
     next <- asks _envNext
     tell
       [ ( this
@@ -275,7 +275,7 @@ bStmt (Forever body) =
 bStmt (Until cond body) =
   boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
-    (bodyID, _) <- withNext Nothing $ bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmt body
     next <- asks _envNext
     tell
       [ ( this
@@ -294,7 +294,7 @@ bStmt (Until cond body) =
 bStmt (While cond body) =
   boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
-    (bodyID, _) <- withNext Nothing $ bStmts body
+    (bodyID, _) <- withNext Nothing $ bStmt body
     next <- asks _envNext
     tell
       [ ( this
@@ -318,7 +318,7 @@ bStmt (For var times body) =
         Sym sym -> varField sym
         _ -> throwError $ InvalidArgsForBuiltinProc "for"
     times' <- emptyShadow <$> bExpr times
-    (body', _) <- withNext Nothing $ bStmts body
+    (body', _) <- withNext Nothing $ bStmt body
     tell
       [ ( this
         , JObj
