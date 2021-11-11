@@ -12,7 +12,7 @@ import Optimizations (exprOptimizations, stmtOptimizations)
 
 optimizeProgram :: Program -> Program
 optimizeProgram =
-  targets . procedures . each . procedureBody . each %~ optimizeStatement
+  targets . procedures . each . procedureBody %~ optimizeStatement
 
 optimizeStatement :: Statement -> Statement
 optimizeStatement =

@@ -63,7 +63,7 @@ bProc (Procedure "when-flag-clicked" params body vars lists) = do
     throwError $ InvalidParamsForSpecialProcDef "when-flag-clicked"
   this <- newID
   withParent (Just this) $ do
-    (bodyID, _) <- withLocals vars lists $ bStmts body
+    (bodyID, _) <- withLocals vars lists $ bStmt body
     tell
       [ ( this
         , JObj
@@ -80,7 +80,7 @@ bProc (Procedure "when-cloned" params body vars lists) = do
     throwError $ InvalidParamsForSpecialProcDef "when-cloned"
   this <- newID
   withParent (Just this) $ do
-    (bodyID, _) <- withLocals vars lists $ bStmts body
+    (bodyID, _) <- withLocals vars lists $ bStmt body
     tell
       [ ( this
         , JObj
@@ -99,7 +99,7 @@ bProc (Procedure "when-received" params body vars lists) = do
       _ -> throwError $ InvalidParamsForSpecialProcDef "when-received"
   this <- newID
   withParent (Just this) $ do
-    (bodyID, _) <- withLocals vars lists $ bStmts body
+    (bodyID, _) <- withLocals vars lists $ bStmt body
     tell
       [ ( this
         , JObj
@@ -121,7 +121,7 @@ bProc (Procedure name params body vars lists) = do
   withParent (Just this) $
     withProcArgs params' $
     withLocals vars lists $ do
-      (bodyID, _) <- bStmts body
+      (bodyID, _) <- bStmt body
       exisitingProcs <- asks _envProcs
       protoypeID <- newID
       let paramIDs = snd <$> fromJust (lookup name exisitingProcs)

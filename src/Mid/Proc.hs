@@ -27,7 +27,7 @@ data Procedure =
   Procedure
     { _procName :: T.Text
     , _procParams :: [Expr]
-    , _procBody :: [Statement]
+    , _procBody :: Statement
     , _procVars :: [T.Text]
     , _procLists :: [T.Text]
     }
@@ -40,7 +40,7 @@ procedureParams :: Lens' Procedure [Expr]
 procedureParams f proc =
   (\params -> proc {_procParams = params}) <$> f (_procParams proc)
 
-procedureBody :: Lens' Procedure [Statement]
+procedureBody :: Lens' Procedure Statement
 procedureBody f proc = (\body -> proc {_procBody = body}) <$> f (_procBody proc)
 
 mkProc :: LispAST -> Maybe (Either MidError Procedure)
@@ -53,7 +53,7 @@ mkProc = f `asTheFunction` "proc"
       let (stmts', listDecls) = partitionMaybe mkListDecl stmts
       vars <- concat <$> sequenceA varDecls
       lists <- concat <$> sequenceA listDecls
-      body <- traverse mkStatement stmts'
+      body <- Do <$> traverse mkStatement stmts'
       pure $ Procedure name params body vars lists
 
 mkProcSignature :: LispAST -> Either MidError (T.Text, [Expr])
