@@ -11,7 +11,7 @@ module Block
 
 import Block.Env (Env(..), withNext, withParent, withProcArgs)
 import Block.Error (ArgCount(..), BlockError(..))
-import Control.Monad (guard, unless, zipWithM)
+import Control.Monad (guard, unless)
 import Control.Monad.Except (Except, throwError)
 import Control.Monad.RWS (RWST, runRWST)
 import Control.Monad.Reader (ReaderT, ask, asks, local)
@@ -454,25 +454,12 @@ stackBlock ::
   -> T.Text
   -> [Expr]
   -> Blocky (Maybe UID, Maybe UID)
-stackBlock opcode fieldFns procName args
-  | length args /= length fieldFns =
+stackBlock opcode inputs procName args
+  | length args /= length inputs =
     throwError $ InvalidArgsForBuiltinProc procName
   | otherwise =
-    boil $ \this parent -> do
-      let (fieldNames, fns) = unzip fieldFns
-      next <- asks _envNext
-      fieldVals <- zipWithM ($) fns args
-      let fields = zip fieldNames fieldVals
-      tell
-        [ ( this
-          , JObj
-              [ ("opcode", JStr opcode)
-              , ("next", idJSON next)
-              , ("parent", idJSON parent)
-              , ("inputs", JObj fields)
-              ])
-        ]
-      pure (Just this, Just this)
+    let inputs' = zipWith (\(name, fn) arg -> (name, fn arg)) inputs args
+     in buildStacking opcode $ InputFields inputs' []
 
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
 bStmts [] = asks $ (Nothing, ) . _envParent
