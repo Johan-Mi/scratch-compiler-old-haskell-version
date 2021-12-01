@@ -324,6 +324,7 @@ builtinProcs =
    , ("set-costume", "looks_switchcostumeto", [val "COSTUME"])
    , ("show", "looks_show", [])
    , ("hide", "looks_hide", [])
+   , ("say", "looks_say", [val "MESSAGE"])
    , ("change-x", "motion_changexby", [val "DX"])
    , ("change-y", "motion_changeyby", [val "DY"])
    , ("set-x", "motion_setx", [val "X"])
@@ -404,6 +405,16 @@ builtinProcs =
             []
             [("STOP_OPTION", pure $ JArr [JStr "this script", JNull])]
         _ -> throwError $ InvalidArgsForBuiltinProc "stop-this-script")
+  , ( "stop-other-scripts"
+    , \case
+        [] ->
+          buildStacking "control_stop" $
+          InputFields
+            []
+            [ ( "STOP_OPTION"
+              , pure $ JArr [JStr "other scripts in sprite", JNull])
+            ]
+        _ -> throwError $ InvalidArgsForBuiltinProc "stop-other-scripts")
   , ( "clone-myself"
     , \case
         [] ->
