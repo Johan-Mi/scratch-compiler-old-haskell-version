@@ -12,18 +12,17 @@ import Control.Monad.Except (Except, ExceptT(..), throwError, withExcept)
 import Control.Monad.State (StateT, evalStateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer.Strict (WriterT, execWriterT, tell)
-import Data.Either (isRight)
 import Data.Foldable (traverse_)
-import Data.Functor ((<&>))
+import Data.Functor (($>), (<&>))
 import Data.Maybe (fromMaybe)
-import Data.Monoid (First(..))
+import Data.Monoid (Any(..), First(..))
 import qualified Data.Text as T
+import Data.Traversable (for)
 import Error (Error(..), IsError)
 import LispAST (LispAST(..), asTheFunction, getStr, getSym, subTrees)
 import Parser (programP)
 import Text.Parsec.Text (parseFromFile)
 import Text.Printf (printf)
-import Utils.Either (maybeToRight)
 import Utils.Trans (hoistExcept, orThrow)
 
 data MacroError
@@ -129,10 +128,12 @@ builtinMacros =
         pure . LispString . T.concat <$> traverse getStr args
       _ -> Nothing
   , \case
-      (LispNode fn asts) -> do
-        let maybeIncludes = maybeToRight . pure . pure <*> include <$> asts
-        guard $ any isRight maybeIncludes
-        let asts' = either id id <$> maybeIncludes
-        pure $ LispNode fn . concat <$> sequenceA asts'
+      (LispNode fn asts) ->
+        let (Any didSomething, asts') =
+              for asts $ \ast ->
+                case include ast of
+                  Just included -> (Any True, included)
+                  Nothing -> (Any False, pure [ast])
+         in guard didSomething $> (LispNode fn . concat <$> sequenceA asts')
       _ -> Nothing
   ]

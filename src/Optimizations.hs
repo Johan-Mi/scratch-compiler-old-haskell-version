@@ -85,12 +85,12 @@ constMinus _ = Nothing
 -- Flatten `Do` blocks
 flattenDo :: Statement -> Maybe Statement
 flattenDo (Do body)
-  | getAny didSomething = Just $ Do flattened
+  | didSomething = Just $ Do flattened
   | otherwise = Nothing
   where
     flatten (Do xs) = (Any True, xs)
     flatten x = (Any False, [x])
-    (didSomething, flattened) = concat <$> traverse flatten body
+    (Any didSomething, flattened) = concat <$> traverse flatten body
 flattenDo _ = Nothing
 
 -- Remove if statements with a constant condition
