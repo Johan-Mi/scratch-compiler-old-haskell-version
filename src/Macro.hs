@@ -7,9 +7,13 @@ module Macro
 
 import Control.Applicative ((<|>))
 import Control.Arrow (left)
-import Control.Monad ((>=>), foldM, guard)
-import Control.Monad.Except (ExceptT(..), liftEither, throwError)
+import Control.Monad ((>=>), guard)
+import Control.Monad.Except (Except, ExceptT(..), throwError, withExcept)
+import Control.Monad.State (StateT, evalStateT, get, put)
+import Control.Monad.Trans (lift)
+import Control.Monad.Writer.Strict (WriterT, execWriterT, tell)
 import Data.Either (isRight)
+import Data.Foldable (traverse_)
 import Data.Functor ((<&>))
 import Data.Maybe (fromMaybe)
 import Data.Monoid (First(..))
@@ -20,6 +24,7 @@ import Parser (programP)
 import Text.Parsec.Text (parseFromFile)
 import Text.Printf (printf)
 import Utils.Either (maybeToRight)
+import Utils.Trans (hoistExcept, orThrow)
 
 data MacroError
   = WrongArgCount T.Text Int Int
@@ -50,19 +55,19 @@ type MacroM = ExceptT Error IO
 
 type Macro = LispAST -> Maybe (MacroM LispAST)
 
-mkMacro :: LispAST -> Maybe (Either MacroError Macro)
+mkMacro :: LispAST -> Maybe (Except MacroError Macro)
 mkMacro =
   flip asTheFunction "macro" $ \case
     [LispSym name, body] ->
-      Right $ \case
+      pure $ \case
         LispSym name'
           | name' == name -> Just $ pure body
         _ -> Nothing
     [LispNode name params, body] -> do
-      name' <- maybeToRight NonSymbolMacroName $ getSym name
-      params' <- maybeToRight (NonSymbolParam name') $ traverse getSym params
+      name' <- orThrow NonSymbolMacroName $ getSym name
+      params' <- orThrow (NonSymbolParam name') $ traverse getSym params
       pure $ mkFuncMacro name' params' body
-    _ -> Left InvalidMacroDefinition
+    _ -> throwError InvalidMacroDefinition
 
 mkFuncMacro :: T.Text -> [T.Text] -> LispAST -> Macro
 mkFuncMacro name params body = f `asTheFunction` name
@@ -96,20 +101,23 @@ include =
       ExceptT $ left Error <$> parseFromFile programP (T.unpack path)
     _ -> throwError $ Error InvalidArgsForInclude
 
-expandList :: (Macro, [LispAST]) -> [LispAST] -> MacroM (Macro, [LispAST])
+expandList :: [LispAST] -> WriterT [LispAST] (StateT Macro MacroM) ()
 expandList =
-  foldM $ \(macros, accum) ast -> do
-    ast' <- expand macros ast
+  traverse_ $ \ast -> do
+    macros <- get
+    ast' <- lift $ lift $ expand macros ast
     let theMacro =
-          mkMacro ast' <&> liftEither . left Error .
-          fmap (\m' -> (getFirst . (First . macros <> First . m'), accum))
-        theInclude = include ast <&> (>>= expandList (macros, accum))
-        theNormal = pure (macros, accum ++ [ast'])
+          mkMacro ast' <&> \m -> do
+            m' <- lift $ lift $ hoistExcept $ withExcept Error m
+            put $ getFirst . (First . macros <> First . m')
+        theInclude = include ast <&> (lift . lift >=> expandList)
+        theNormal = tell [ast']
     fromMaybe theNormal $ theMacro <|> theInclude
 
 expandMacros :: [LispAST] -> MacroM [LispAST]
 expandMacros =
-  fmap snd . expandList (getFirst . foldMap (First .) builtinMacros, [])
+  flip evalStateT (getFirst . foldMap (First .) builtinMacros) .
+  execWriterT . expandList
 
 builtinMacros :: [Macro]
 builtinMacros =
