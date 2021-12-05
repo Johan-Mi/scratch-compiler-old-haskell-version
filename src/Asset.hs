@@ -29,7 +29,7 @@ assetJSON (Asset name path md5sum) =
    in JObj
         [ ("assetId", JStr md5sum)
         , ("name", JStr name)
-        , ("md5ext", JStr (md5sum `T.append` ext))
+        , ("md5ext", JStr (md5sum <> ext))
         , ("dataFormat", JStr (T.tail ext))
         ]
 

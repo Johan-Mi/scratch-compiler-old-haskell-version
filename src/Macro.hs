@@ -84,8 +84,7 @@ subst name mvars = go
   where
     go :: LispAST -> MacroM LispAST
     go (LispUnquote (LispSym sym)) =
-      maybe (throwError $ Error $ UnknownMetaVar name sym) pure $
-      lookup sym mvars
+      orThrow (Error $ UnknownMetaVar name sym) $ lookup sym mvars
     go (LispUnquote ast) = pure ast
     go ast = subTrees go ast
 

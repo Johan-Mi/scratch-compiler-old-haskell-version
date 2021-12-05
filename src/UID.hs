@@ -22,7 +22,7 @@ newID :: MonadState UIDState m => m UID
 newID = do
   UIDState counter <- get
   put $ UIDState $ counter + 1
-  pure $ T.append "id-" $ T.pack $ show counter
+  pure $ "id-" <> T.pack (show counter)
 
 idJSON :: Maybe UID -> JValue
 idJSON = maybe JNull JStr

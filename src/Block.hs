@@ -30,6 +30,7 @@ import JSON (JValue(..), showJSON)
 import Mid.Expr (Expr(..), Value(..), toString)
 import Mid.Proc (Procedure(..), Statement(..))
 import UID (UID, UIDState, idJSON, newID)
+import Utils.Trans (orThrow)
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
 
@@ -178,7 +179,7 @@ bProc (Procedure name params body vars lists) = do
             toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> params'
       let argumentdefaults =
             toStrict $ decodeUtf8 $ showJSON $ JArr $ params' $> JStr ""
-      let proccode = T.append name $ T.replicate (length params) " %s"
+      let proccode = name <> T.replicate (length params) " %s"
       tell
         [ ( this
           , JObj
@@ -221,13 +222,13 @@ bStmt (ProcCall procName args) =
       boil $ \this parent -> do
         exisitingProcs <- asks _envProcs
         paramIDs <-
-          maybe (throwError $ UnknownProc procName) (pure . fmap snd) $
-          lookup procName exisitingProcs
+          orThrow (UnknownProc procName) $
+          fmap snd <$> lookup procName exisitingProcs
         next <- asks _envNext
         args' <- fmap emptyShadow <$> traverse bExpr args
         let inputs = zip paramIDs args'
-        let proccode = T.append procName $ T.replicate (length args) " %s"
-        let argumentids =
+            proccode = procName <> T.replicate (length args) " %s"
+            argumentids =
               toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
         tell
           [ ( this
@@ -519,15 +520,7 @@ builtinFuncs =
            in buildNonShadow "data_itemoflist" $
               InputFields [("INDEX", index')] [("LIST", list')]
         args -> throwError $ FuncWrongArgCount "!!" (Exactly 2) $ length args)
-  , ( "+"
-    , let go [] = bExpr $ Lit $ VNum 0
-          go [x] = bExpr x
-          go (lhs:rhs) =
-            let lhs' = emptyShadow <$> bExpr lhs
-                rhs' = emptyShadow <$> go rhs
-             in buildNonShadow "operator_add" $
-                InputFields [("NUM1", lhs'), ("NUM2", rhs')] []
-       in go)
+  , ("+", associative "operator_add" "NUM1" "NUM2" $ Lit $ VNum 0)
   , ( "-"
     , \case
         [] -> throwError $ FuncWrongArgCount "-" (AtLeast 1) 0
@@ -537,15 +530,7 @@ builtinFuncs =
               rhs' = emptyShadow <$> bExpr (FuncCall "+" rhs)
            in buildNonShadow "operator_subtract" $
               InputFields [("NUM1", lhs'), ("NUM2", rhs')] [])
-  , ( "*"
-    , let go [] = bExpr $ Lit $ VNum 0
-          go [x] = bExpr x
-          go (lhs:rhs) =
-            let lhs' = emptyShadow <$> bExpr lhs
-                rhs' = emptyShadow <$> go rhs
-             in buildNonShadow "operator_multiply" $
-                InputFields [("NUM1", lhs'), ("NUM2", rhs')] []
-       in go)
+  , ("*", associative "operator_multiply" "NUM1" "NUM2" $ Lit $ VNum 1)
   , ( "/"
     , \case
         (lhs:rhs@(_:_)) ->
@@ -554,33 +539,9 @@ builtinFuncs =
            in buildNonShadow "operator_divide" $
               InputFields [("NUM1", lhs'), ("NUM2", rhs')] []
         args -> throwError $ FuncWrongArgCount "/" (AtLeast 2) $ length args)
-  , ( "++"
-    , let go [] = bExpr $ Lit $ VStr ""
-          go [x] = bExpr x
-          go (lhs:rhs) =
-            let lhs' = emptyShadow <$> bExpr lhs
-                rhs' = emptyShadow <$> go rhs
-             in buildNonShadow "operator_join" $
-                InputFields [("STRING1", lhs'), ("STRING2", rhs')] []
-       in go)
-  , ( "or"
-    , let go [] = bExpr $ Lit $ VBool False
-          go [x] = bExpr x
-          go (lhs:rhs) =
-            let lhs' = emptyShadow <$> bExpr lhs
-                rhs' = emptyShadow <$> go rhs
-             in buildNonShadow "operator_or" $
-                InputFields [("OPERAND1", lhs'), ("OPERAND2", rhs')] []
-       in go)
-  , ( "and"
-    , let go [] = bExpr $ Lit $ VBool True
-          go [x] = bExpr x
-          go (lhs:rhs) =
-            let lhs' = emptyShadow <$> bExpr lhs
-                rhs' = emptyShadow <$> go rhs
-             in buildNonShadow "operator_and" $
-                InputFields [("OPERAND1", lhs'), ("OPERAND2", rhs')] []
-       in go)
+  , ("++", associative "operator_join" "STRING1" "STRING2" $ Lit $ VStr "")
+  , ("or", associative "operator_or" "OPERAND1" "OPERAND2" $ Lit $ VBool False)
+  , ("and", associative "operator_and" "OPERAND1" "OPERAND2" $ Lit $ VBool True)
   , simpleOperator "=" "operator_equals" ["OPERAND1", "OPERAND2"]
   , simpleOperator "<" "operator_lt" ["OPERAND1", "OPERAND2"]
   , simpleOperator ">" "operator_gt" ["OPERAND1", "OPERAND2"]
@@ -637,6 +598,15 @@ builtinFuncs =
                   [("NUM", num')]
                   [("OPERATOR", pure $ JArr [JStr op, JNull])]
           args -> throwError $ FuncWrongArgCount name (Exactly 1) (length args))
+    associative opcode lhsName rhsName zero =
+      let go [] = bExpr zero
+          go [x] = bExpr x
+          go (lhs:rhs) =
+            let lhs' = emptyShadow <$> bExpr lhs
+                rhs' = emptyShadow <$> go rhs
+             in buildNonShadow opcode $
+                InputFields [(lhsName, lhs'), (rhsName, rhs')] []
+       in go
 
 bSubstack :: Statement -> Blocky JValue
 bSubstack = fmap (\(i, _) -> JArr [JNum 2, idJSON i]) . withNext Nothing . bStmt
