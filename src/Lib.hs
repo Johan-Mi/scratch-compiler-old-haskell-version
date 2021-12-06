@@ -5,6 +5,7 @@ module Lib
 import Control.Arrow (left)
 import Control.Monad ((<=<))
 import Control.Monad.Except (liftEither, liftIO, runExceptT, withExceptT)
+import Error (IsError(..))
 import Macro (expandMacros)
 import Mid (mkProgram)
 import Optimize (optimizeProgram)
@@ -15,8 +16,9 @@ import Text.Parsec.Text (parseFromFile)
 compileProgram :: FilePath -> IO ()
 compileProgram path =
   either id pure <=< runExceptT $ do
-    parsed <- liftEither . left print =<< liftIO (parseFromFile programP path)
-    expanded <- withExceptT print $ expandMacros parsed
-    prg <- liftEither $ left print $ mkProgram expanded
+    parsed <-
+      liftEither . left printError =<< liftIO (parseFromFile programP path)
+    expanded <- withExceptT printError $ expandMacros parsed
+    prg <- liftEither $ left printError $ mkProgram expanded
     let optimized = optimizeProgram prg
-    withExceptT print $ writeSB3File optimized
+    withExceptT printError $ writeSB3File optimized

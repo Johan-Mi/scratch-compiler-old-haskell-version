@@ -1,21 +1,25 @@
 {-# LANGUAGE ExistentialQuantification #-}
 
 module Error
-  ( IsError
+  ( IsError(..)
   , Error(..)
   ) where
 
+import qualified Data.Text as T
+import qualified Data.Text.IO as IO
 import Text.Parsec (ParseError)
 
-class Show e =>
-      IsError e
-
+class IsError e where
+  showError :: e -> T.Text
+  printError :: e -> IO ()
+  printError = IO.putStrLn . showError
 
 data Error =
   forall e. IsError e =>
             Error e
 
-instance Show Error where
-  show (Error e) = show e
+instance IsError Error where
+  showError (Error e) = showError e
 
-instance IsError ParseError
+instance IsError ParseError where
+  showError = T.pack . show

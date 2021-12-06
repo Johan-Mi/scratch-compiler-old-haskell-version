@@ -18,11 +18,10 @@ import Data.Maybe (fromMaybe)
 import Data.Monoid (Any(..), First(..))
 import qualified Data.Text as T
 import Data.Traversable (for)
-import Error (Error(..), IsError)
+import Error (Error(..), IsError(..))
 import LispAST (LispAST(..), asTheFunction, getStr, getSym, subTrees)
 import Parser (programP)
 import Text.Parsec.Text (parseFromFile)
-import Text.Printf (printf)
 import Utils.Trans (hoistExcept, orThrow)
 
 data MacroError
@@ -33,22 +32,20 @@ data MacroError
   | InvalidArgsForInclude
   | InvalidMacroDefinition -- Very unspecific, TODO: Better errors
 
-instance Show MacroError where
-  show (WrongArgCount name expected got) =
-    printf
-      "function macro `%s` expected %d arguments but got %d"
-      name
-      expected
-      got
-  show (NonSymbolParam name) =
-    printf "non-symbol in parameter list of function macro `%s`" name
-  show NonSymbolMacroName = "non-symbol used as macro name"
-  show (UnknownMetaVar name var) =
-    printf "unknown meta-variable `%s` in body of function macro `%s`" var name
-  show InvalidMacroDefinition = "invalid macro definition"
-  show InvalidArgsForInclude = "invalid args for an `include` statement"
-
-instance IsError MacroError
+instance IsError MacroError where
+  showError (WrongArgCount name expected got) =
+    "function macro `" <>
+    name <>
+    "` expected " <>
+    T.pack (show expected) <> " arguments but got " <> T.pack (show got)
+  showError (NonSymbolParam name) =
+    "non-symbol in parameter list of function macro `" <> name <> "`"
+  showError NonSymbolMacroName = "non-symbol used as macro name"
+  showError (UnknownMetaVar name var) =
+    "unknown meta-variable `" <>
+    var <> "` in body of function macro `" <> name <> "`"
+  showError InvalidMacroDefinition = "invalid macro definition"
+  showError InvalidArgsForInclude = "invalid args for an `include` statement"
 
 type MacroM = ExceptT Error IO
 

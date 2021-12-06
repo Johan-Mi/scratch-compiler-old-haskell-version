@@ -1,10 +1,12 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Mid.Error
   ( MidError(..)
   ) where
 
 import qualified Data.Text as T
+import Error (IsError(..))
 import LispAST (LispAST)
-import Text.Printf (printf)
 import Utils.Text (cropTextTo)
 
 data MidError
@@ -22,25 +24,32 @@ data MidError
   | NotAnExpression LispAST
   | InvalidArgumentsFor T.Text
 
-instance Show MidError where
-  show (NonSpriteAtTopLevel ast) =
-    printf "non-sprite at top level of program: `%s`" $
-    cropTextTo 30 $ T.pack $ show ast
-  show NoStage = "program has no stage"
-  show NonSymbolInVarDecl = "non-symbol in variable declaration"
-  show NonSymbolInListDecl = "non-symbol in list declaration"
-  show (InvalidItemInSprite ast) =
-    printf "invalid item in sprite: `%s`" $ cropTextTo 30 $ T.pack $ show ast
-  show SpriteLacksName = "sprite lacks name"
-  show NonStringInCostumeList = "non-string in costume list"
-  show (CostumeLacksFilePath name) =
-    printf "costume `%s` lacks a file path" name
-  show (InvalidProcSignature ast) =
-    printf "invalid procedure signature: `%s`" $
-    cropTextTo 30 $ T.pack $ show ast
-  show ProcDefLacksSignature = "procedure definition lacks a signature"
-  show (NotAStatement ast) =
-    printf "not a statement: `%s`" $ cropTextTo 30 $ T.pack $ show ast
-  show (NotAnExpression ast) =
-    printf "not an expression: `%s`" $ cropTextTo 30 $ T.pack $ show ast
-  show (InvalidArgumentsFor name) = printf "invalid arguments for `%s`" name
+instance IsError MidError where
+  showError (NonSpriteAtTopLevel ast) =
+    "non-sprite at top level of program: `" <> item <> "`"
+    where
+      item = cropTextTo 30 $ T.pack $ show ast
+  showError NoStage = "program has no stage"
+  showError NonSymbolInVarDecl = "non-symbol in variable declaration"
+  showError NonSymbolInListDecl = "non-symbol in list declaration"
+  showError (InvalidItemInSprite ast) =
+    "invalid item in sprite: `" <> item <> "`"
+    where
+      item = cropTextTo 30 $ T.pack $ show ast
+  showError SpriteLacksName = "sprite lacks name"
+  showError NonStringInCostumeList = "non-string in costume list"
+  showError (CostumeLacksFilePath name) =
+    "costume `" <> name <> "` lacks a file path"
+  showError (InvalidProcSignature ast) =
+    "invalid procedure signature: `" <> item <> "`"
+    where
+      item = cropTextTo 30 $ T.pack $ show ast
+  showError ProcDefLacksSignature = "procedure definition lacks a signature"
+  showError (NotAStatement ast) = "not a statement: `" <> item <> "`"
+    where
+      item = cropTextTo 30 $ T.pack $ show ast
+  showError (NotAnExpression ast) = "not an expression: `" <> item <> "`"
+    where
+      item = cropTextTo 30 $ T.pack $ show ast
+  showError (InvalidArgumentsFor name) =
+    "invalid arguments for `" <> name <> "`"

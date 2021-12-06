@@ -11,7 +11,6 @@ import Control.Monad (guard)
 import Data.Functor (($>))
 import qualified Data.Text as T
 import Lens.Micro (Traversal')
-import Text.Printf (printf)
 
 data LispAST
   = LispNum Double
@@ -23,9 +22,9 @@ data LispAST
 
 instance Show LispAST where
   show (LispNum n) = show n
-  show (LispString s) = printf "\"%s\"" s
+  show (LispString s) = show s
   show (LispSym s) = T.unpack s
-  show (LispNode fun args) = printf "(%s)" $ unwords $ show <$> (fun : args)
+  show (LispNode fun args) = "(" <> unwords (show <$> fun : args) <> ")"
   show (LispUnquote ast) = ',' : show ast
 
 isTheFunction :: T.Text -> LispAST -> Bool
