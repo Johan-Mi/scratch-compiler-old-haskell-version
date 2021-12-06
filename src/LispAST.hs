@@ -18,14 +18,7 @@ data LispAST
   | LispSym T.Text
   | LispNode LispAST [LispAST]
   | LispUnquote LispAST
-  deriving (Eq)
-
-instance Show LispAST where
-  show (LispNum n) = show n
-  show (LispString s) = show s
-  show (LispSym s) = T.unpack s
-  show (LispNode fun args) = "(" <> unwords (show <$> fun : args) <> ")"
-  show (LispUnquote ast) = ',' : show ast
+  deriving (Eq, Show)
 
 isTheFunction :: T.Text -> LispAST -> Bool
 isTheFunction func (LispNode (LispSym str) _) = str == func
