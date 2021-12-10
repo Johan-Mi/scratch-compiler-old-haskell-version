@@ -7,12 +7,13 @@ module Parser
   , nodeP
   ) where
 
-import Control.Applicative ((<|>))
+import Control.Applicative ((<|>), liftA2)
 import Control.Monad (void)
 import qualified Data.Text as T
 import LispAST (LispAST(..))
 import Text.Parsec
   ( (<?>)
+  , between
   , char
   , choice
   , digit
@@ -23,12 +24,20 @@ import Text.Parsec
   , many1
   , noneOf
   , oneOf
+  , optional
   , skipMany
   , space
   , try
   )
 import Text.Parsec.Text (Parser)
-import Text.Printf (printf)
+
+(<:>) :: Parser a -> Parser [a] -> Parser [a]
+(<:>) = liftA2 (:)
+
+infixr <:>
+
+(<<>>) :: Semigroup m => Parser m -> Parser m -> Parser m
+(<<>>) = liftA2 (<>)
 
 comment :: Parser ()
 comment =
@@ -57,19 +66,15 @@ exprP = choice [try numP, stringP, symP, nodeP, unquoteP] <?> "expression"
 --   DecimalDigits? . DecimalDigits[~Sep]opt ExponentPart?
 --   DecimalDigits ExponentPart[~Sep]opt
 numberP :: Parser Double
-numberP = pm (read <$> choice [hexInt, expDec, dec, int])
+numberP = read <$> pm (choice [hexInt, expDec, dec, int])
   where
-    positive = (char '+' *>)
-    negative :: Parser Double -> Parser Double
-    negative p = negate <$> (char '-' *> p)
-    pm p = p <|> positive p <|> negative p
+    pm p = (char '-' <:> p) <|> (optional (char '+') *> p)
     int = many1 digit
-    negInt = (:) <$> char '-' <*> int
-    hexInt = try $ ("0x" ++) <$> (char '0' *> oneOf "xX" *> many1 hexDigit)
-    dec = try $ printf "%s.%s0" <$> (many1 digit <* char '.') <*> many digit
+    negInt = char '-' <:> int
+    hexInt = try $ char '0' <:> oneOf "xX" <:> many1 hexDigit
+    dec = try $ many1 digit <<>> (char '.' <:> ((<> "0") <$> many digit))
     decOrInt = dec <|> int
-    expDec =
-      try $ printf "%se%s" <$> (decOrInt <* oneOf "eE") <*> (int <|> negInt)
+    expDec = try $ decOrInt <<>> (oneOf "eE" <:> (int <|> negInt))
 
 numP :: Parser LispAST
 numP = LispNum <$> numberP <?> "number"
@@ -83,14 +88,13 @@ stringP =
     escaped = oneOf "\"\\"
 
 symP :: Parser LispAST
-symP =
-  LispSym . T.pack <$> ((:) <$> firstChar <*> many nonFirstChar) <?> "symbol"
+symP = LispSym . T.pack <$> (firstChar <:> many nonFirstChar) <?> "symbol"
   where
     firstChar = letter <|> oneOf "!$%&*+-./:<=>?@^_~[]"
     nonFirstChar = firstChar <|> digit
 
 inParens :: Parser a -> Parser a
-inParens p = char '(' *> ws *> p <* ws <* char ')'
+inParens = between (char '(' *> ws) (ws <* char ')')
 
 nodeP :: Parser LispAST
 nodeP = inParens (LispNode <$> exprP <*> many (ws *> exprP)) <?> "node"
