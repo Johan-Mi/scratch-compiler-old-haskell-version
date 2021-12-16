@@ -12,11 +12,13 @@ import Control.Monad.Except (Except, ExceptT(..), throwError, withExcept)
 import Control.Monad.State (StateT, evalStateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer.Strict (WriterT, execWriterT, tell)
+import Data.Char (isPrint)
 import Data.Foldable (traverse_)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Any(..), First(..))
 import qualified Data.Text as T
+import qualified Data.Text.IO as IO
 import Data.Traversable (for)
 import Error (Error(..), IsError(..))
 import LispAST (LispAST(..), asTheFunction, getStr, getSym, subTrees)
@@ -133,4 +135,14 @@ builtinMacros =
                   Nothing -> (Any False, pure [ast])
          in guard didSomething $> (LispNode fn . concat <$> sequenceA asts')
       _ -> Nothing
+  , \case
+      (LispNode (LispSym "include-str") [LispString path]) ->
+        Just $
+        lift $ LispString . T.map normalizeChar <$> IO.readFile (T.unpack path)
+      _ -> Nothing
   ]
+
+normalizeChar :: Char -> Char
+normalizeChar c
+  | isPrint c = c
+  | otherwise = ' '
