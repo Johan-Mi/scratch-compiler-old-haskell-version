@@ -34,4 +34,4 @@ assetJSON (Asset name path md5sum) =
         ]
 
 assetId :: Asset -> FilePath
-assetId asset = T.unpack (assetMD5 asset) ++ takeExtension (assetPath asset)
+assetId asset = T.unpack (assetMD5 asset) <> takeExtension (assetPath asset)

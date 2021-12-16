@@ -47,4 +47,4 @@ data ArgCount
 
 instance Show ArgCount where
   show (Exactly num) = show num
-  show (AtLeast num) = "at least " ++ show num
+  show (AtLeast num) = "at least " <> show num

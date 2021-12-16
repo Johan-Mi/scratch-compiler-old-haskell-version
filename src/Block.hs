@@ -331,7 +331,7 @@ builtinProcs =
    , ("set-x", "motion_setx", [val "X"])
    , ("set-y", "motion_sety", [val "Y"])
    , ("wait", "control_wait", [val "DURATION"])
-   ]) ++
+   ]) <>
   [ ( "send-broadcast-sync"
     , \case
         [name] ->

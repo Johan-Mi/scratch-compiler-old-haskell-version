@@ -2,3 +2,4 @@
   - { name: 'return', within: [], message: 'Use `pure` instead' }
   - { name: '>>', within: [], message: 'Use `*>` instead' }
   - { name: '<<', within: [], message: 'Use `<*` instead' }
+  - { name: '++', within: [], message: 'Use `<>` instead' }
