@@ -500,10 +500,8 @@ bExpr (Sym sym) = do
         lookup sym lists <&> \(i, name) ->
           pure $ NonShadow $ JArr [JNum 13, JStr name, JStr i]
       theBuiltin = lookup sym builtinSymbols
-  fromMaybe err $
+  fromMaybe (throwError $ UnknownSymbolInExpr sym) $
     getFirst $ foldMap First [theProcArg, theVar, theList, theBuiltin]
-  where
-    err = throwError $ UnknownSymbolInExpr sym
 bExpr (FuncCall name args) =
   maybe (throwError $ UnknownFunc name) ($ args) $ lookup name builtinFuncs
 
@@ -520,7 +518,7 @@ builtinFuncs =
            in buildNonShadow "data_itemoflist" $
               InputFields [("INDEX", index')] [("LIST", list')]
         args -> throwError $ FuncWrongArgCount "!!" (Exactly 2) $ length args)
-  , ("+", associative "operator_add" "NUM1" "NUM2" $ Lit $ VNum 0)
+  , ("+", associative "operator_add" "NUM1" "NUM2" emptyShadow $ Lit $ VNum 0)
   , ( "-"
     , \case
         [] -> throwError $ FuncWrongArgCount "-" (AtLeast 1) 0
@@ -530,7 +528,8 @@ builtinFuncs =
               rhs' = emptyShadow <$> bExpr (FuncCall "+" rhs)
            in buildNonShadow "operator_subtract" $
               InputFields [("NUM1", lhs'), ("NUM2", rhs')] [])
-  , ("*", associative "operator_multiply" "NUM1" "NUM2" $ Lit $ VNum 1)
+  , ( "*"
+    , associative "operator_multiply" "NUM1" "NUM2" emptyShadow $ Lit $ VNum 1)
   , ( "/"
     , \case
         (lhs:rhs@(_:_)) ->
@@ -539,9 +538,15 @@ builtinFuncs =
            in buildNonShadow "operator_divide" $
               InputFields [("NUM1", lhs'), ("NUM2", rhs')] []
         args -> throwError $ FuncWrongArgCount "/" (AtLeast 2) $ length args)
-  , ("++", associative "operator_join" "STRING1" "STRING2" $ Lit $ VStr "")
-  , ("or", associative "operator_or" "OPERAND1" "OPERAND2" $ Lit $ VBool False)
-  , ("and", associative "operator_and" "OPERAND1" "OPERAND2" $ Lit $ VBool True)
+  , ( "++"
+    , associative "operator_join" "STRING1" "STRING2" emptyShadow $
+      Lit $ VStr "")
+  , ( "or"
+    , associative "operator_or" "OPERAND1" "OPERAND2" noShadow $
+      Lit $ VBool False)
+  , ( "and"
+    , associative "operator_and" "OPERAND1" "OPERAND2" noShadow $
+      Lit $ VBool True)
   , simpleOperator "=" "operator_equals" ["OPERAND1", "OPERAND2"]
   , simpleOperator "<" "operator_lt" ["OPERAND1", "OPERAND2"]
   , simpleOperator ">" "operator_gt" ["OPERAND1", "OPERAND2"]
@@ -598,12 +603,12 @@ builtinFuncs =
                   [("NUM", num')]
                   [("OPERATOR", pure $ JArr [JStr op, JNull])]
           args -> throwError $ FuncWrongArgCount name (Exactly 1) (length args))
-    associative opcode lhsName rhsName zero =
+    associative opcode lhsName rhsName shadow zero =
       let go [] = bExpr zero
           go [x] = bExpr x
           go (lhs:rhs) =
-            let lhs' = emptyShadow <$> bExpr lhs
-                rhs' = emptyShadow <$> go rhs
+            let lhs' = shadow <$> bExpr lhs
+                rhs' = shadow <$> go rhs
              in buildNonShadow opcode $
                 InputFields [(lhsName, lhs'), (rhsName, rhs')] []
        in go

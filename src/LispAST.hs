@@ -1,14 +1,11 @@
 module LispAST
   ( LispAST(..)
-  , isTheFunction
   , asTheFunction
   , getSym
   , getStr
   , subTrees
   ) where
 
-import Control.Monad (guard)
-import Data.Functor (($>))
 import qualified Data.Text as T
 import Lens.Micro (Traversal')
 
@@ -20,13 +17,9 @@ data LispAST
   | LispUnquote LispAST
   deriving (Eq, Show)
 
-isTheFunction :: T.Text -> LispAST -> Bool
-isTheFunction func (LispNode (LispSym str) _) = str == func
-isTheFunction _ _ = False
-
 asTheFunction :: ([LispAST] -> a) -> T.Text -> LispAST -> Maybe a
-asTheFunction f name (LispNode (LispSym str) args) =
-  guard (str == name) $> f args
+asTheFunction f name (LispNode (LispSym str) args)
+  | str == name = Just $ f args
 asTheFunction _ _ _ = Nothing
 
 getSym :: LispAST -> Maybe T.Text
