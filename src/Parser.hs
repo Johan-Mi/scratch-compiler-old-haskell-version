@@ -36,9 +36,6 @@ import Text.Parsec.Text (Parser)
 
 infixr <:>
 
-(<<>>) :: Semigroup m => Parser m -> Parser m -> Parser m
-(<<>>) = liftA2 (<>)
-
 comment :: Parser ()
 comment =
   char ';' *> skipMany (noneOf "\n") *> (void (char '\n') <|> eof) <?> "comment"
@@ -72,9 +69,9 @@ numberP = read <$> pm (choice [hexInt, expDec, dec, int])
     int = many1 digit
     negInt = char '-' <:> int
     hexInt = try $ char '0' <:> oneOf "xX" <:> many1 hexDigit
-    dec = try $ many1 digit <<>> (char '.' <:> ((<> "0") <$> many digit))
+    dec = try $ many1 digit <> (char '.' <:> ((<> "0") <$> many digit))
     decOrInt = dec <|> int
-    expDec = try $ decOrInt <<>> (oneOf "eE" <:> (int <|> negInt))
+    expDec = try $ decOrInt <> (oneOf "eE" <:> (int <|> negInt))
 
 numP :: Parser LispAST
 numP = LispNum <$> numberP <?> "number"
