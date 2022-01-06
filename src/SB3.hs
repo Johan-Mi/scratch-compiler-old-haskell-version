@@ -64,16 +64,16 @@ projectJSON prg = do
   globalLists <- for (prg ^. stage . lists) $ \v -> (v, ) . (, v) <$> newID
   let env =
         Env
-          { _envParent = Nothing
-          , _envNext = Nothing
-          , _envProcs = []
-          , _envProcArgs = []
-          , _envLocalVars = []
-          , _envSpriteVars = []
-          , _envGlobalVars = globalVars
-          , _envLocalLists = []
-          , _envSpriteLists = []
-          , _envGlobalLists = globalLists
+          { envParent = Nothing
+          , envNext = Nothing
+          , envProcs = []
+          , envProcArgs = []
+          , envLocalVars = []
+          , envSpriteVars = []
+          , envGlobalVars = globalVars
+          , envLocalLists = []
+          , envSpriteLists = []
+          , envGlobalLists = globalLists
           }
   (targets', assetLists) <-
     unzip <$> traverse (spriteJSON env) (prg ^.. targets)
@@ -92,9 +92,9 @@ spriteJSON env spr = do
       pure (p ^. procedureName, params)
   let env' =
         env
-          { _envProcs = procs
-          , _envSpriteVars = spriteVars
-          , _envSpriteLists = spriteLists
+          { envProcs = procs
+          , envSpriteVars = spriteVars
+          , envSpriteLists = spriteLists
           }
   blocks <-
     concat <$>

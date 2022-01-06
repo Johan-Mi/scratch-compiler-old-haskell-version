@@ -7,14 +7,14 @@ module Macro
 
 import Control.Applicative ((<|>))
 import Control.Arrow (left)
-import Control.Monad ((>=>), guard)
+import Control.Monad ((>=>))
 import Control.Monad.Except (Except, ExceptT(..), throwError, withExcept)
 import Control.Monad.State (StateT, evalStateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer.Strict (WriterT, execWriterT, tell)
 import Data.Char (isPrint)
 import Data.Foldable (traverse_)
-import Data.Functor (($>), (<&>))
+import Data.Functor ((<&>))
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Any(..), First(..))
 import qualified Data.Text as T
@@ -127,13 +127,13 @@ builtinMacros =
         pure . LispString . T.concat <$> traverse getStr args
       _ -> Nothing
   , \case
-      (LispNode fn asts) ->
-        let (Any didSomething, asts') =
-              for asts $ \ast ->
-                case include ast of
-                  Just included -> (Any True, included)
-                  Nothing -> (Any False, pure [ast])
-         in guard didSomething $> (LispNode fn . concat <$> sequenceA asts')
+      (LispNode fn asts)
+        | didSomething -> Just $ LispNode fn . concat <$> sequenceA asts'
+        where (Any didSomething, asts') =
+                for asts $ \ast ->
+                  case include ast of
+                    Just included -> (Any True, included)
+                    Nothing -> (Any False, pure [ast])
       _ -> Nothing
   , \case
       (LispNode (LispSym "include-str") [LispString path]) ->

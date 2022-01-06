@@ -11,6 +11,7 @@ module Block
 
 import Block.Env (Env(..), withNext, withParent, withProcArgs)
 import Block.Error (ArgCount(..), BlockError(..))
+import Control.Applicative ((<|>))
 import Control.Monad (guard, unless)
 import Control.Monad.Except (Except, throwError)
 import Control.Monad.RWS (RWST, runRWST)
@@ -18,10 +19,8 @@ import Control.Monad.Reader (ReaderT, ask, asks, local)
 import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
-import Data.Foldable (fold)
 import Data.Functor (($>), (<&>))
-import Data.Maybe (fromJust, fromMaybe, isNothing)
-import Data.Monoid (First(..))
+import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Text as T
 import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Encoding (decodeUtf8)
@@ -55,10 +54,11 @@ data InputFields =
     , _fields :: [(T.Text, Blocky JValue)]
     }
 
-buildNonShadow :: T.Text -> InputFields -> Blocky Reporter
-buildNonShadow opcode (InputFields inputs fields) = do
+buildReporterOf ::
+     (JValue -> Reporter) -> T.Text -> InputFields -> Blocky Reporter
+buildReporterOf shadow opcode (InputFields inputs fields) = do
   this <- newID
-  parent <- asks _envParent
+  parent <- asks envParent
   withParent (Just this) $ do
     inputs' <- traverse sequenceA inputs
     fields' <- traverse sequenceA fields
@@ -71,13 +71,19 @@ buildNonShadow opcode (InputFields inputs fields) = do
             , ("fields", JObj fields')
             ])
       ]
-    pure $ NonShadow $ JStr this
+    pure $ shadow $ JStr this
+
+buildNonShadow :: T.Text -> InputFields -> Blocky Reporter
+buildNonShadow = buildReporterOf NonShadow
+
+buildShadow :: T.Text -> InputFields -> Blocky Reporter
+buildShadow = buildReporterOf Shadow
 
 buildStacking :: T.Text -> InputFields -> Blocky (Maybe UID, Maybe UID)
 buildStacking opcode (InputFields inputs fields) = do
   this <- newID
-  next <- asks _envNext
-  parent <- asks _envParent
+  next <- asks envNext
+  parent <- asks envParent
   withParent (Just this) $ do
     inputs' <- traverse sequenceA inputs
     fields' <- traverse sequenceA fields
@@ -168,7 +174,7 @@ bProc (Procedure name params body vars lists) = do
     withProcArgs params' $
     withLocals vars lists $ do
       (bodyID, _) <- bStmt body
-      exisitingProcs <- asks _envProcs
+      exisitingProcs <- asks envProcs
       protoypeID <- newID
       let paramIDs = snd <$> fromJust (lookup name exisitingProcs)
       reporters <-
@@ -220,11 +226,11 @@ bStmt (ProcCall procName args) =
     Just fn -> fn args
     Nothing ->
       boil $ \this parent -> do
-        exisitingProcs <- asks _envProcs
+        exisitingProcs <- asks envProcs
         paramIDs <-
           orThrow (UnknownProc procName) $
           fmap snd <$> lookup procName exisitingProcs
-        next <- asks _envNext
+        next <- asks envNext
         args' <- fmap emptyShadow <$> traverse bExpr args
         let inputs = zip paramIDs args'
             proccode = procName <> T.replicate (length args) " %s"
@@ -253,37 +259,25 @@ bStmt (Do xs) = bStmts xs
 bStmt (IfElse cond true false) =
   boil $ \this parent -> do
     condition <- noShadow <$> bExpr cond
-    (trueID, _) <- withNext Nothing $ bStmt true
-    (falseID, _) <- withNext Nothing $ bStmt false
-    next <- asks _envNext
-    if isNothing falseID
-      then tell
-             [ ( this
-               , JObj
-                   [ ("opcode", JStr "control_if")
-                   , ("next", idJSON next)
-                   , ("parent", idJSON parent)
-                   , ( "inputs"
-                     , JObj
-                         [ ("CONDITION", condition)
-                         , ("SUBSTACK", JArr [JNum 2, idJSON trueID])
-                         ])
-                   ])
-             ]
-      else tell
-             [ ( this
-               , JObj
-                   [ ("opcode", JStr "control_if_else")
-                   , ("next", idJSON next)
-                   , ("parent", idJSON parent)
-                   , ( "inputs"
-                     , JObj
-                         [ ("CONDITION", condition)
-                         , ("SUBSTACK", JArr [JNum 2, idJSON trueID])
-                         , ("SUBSTACK2", JArr [JNum 2, idJSON falseID])
-                         ])
-                   ])
-             ]
+    true' <- bSubstack true
+    (false', _) <- withNext Nothing $ bStmt false
+    next <- asks envNext
+    let (opcode, substack2) =
+          case false' of
+            Just false'' ->
+              ("control_if_else", [("SUBSTACK2", JArr [JNum 2, JStr false''])])
+            Nothing -> ("control_if", [])
+    tell
+      [ ( this
+        , JObj
+            [ ("opcode", JStr opcode)
+            , ("next", idJSON next)
+            , ("parent", idJSON parent)
+            , ( "inputs"
+              , JObj $
+                [("CONDITION", condition), ("SUBSTACK", true')] <> substack2)
+            ])
+      ]
     pure (Just this, Just this)
 bStmt (Repeat times body) =
   let times' = emptyShadow <$> bExpr times
@@ -419,28 +413,13 @@ builtinProcs =
   , ( "clone-myself"
     , \case
         [] ->
-          boil $ \this parent -> do
-            next <- asks _envNext
-            menu <- newID
-            tell
-              [ ( this
-                , JObj
-                    [ ("opcode", JStr "control_create_clone_of")
-                    , ("next", idJSON next)
-                    , ("parent", idJSON parent)
-                    , ( "inputs"
-                      , JObj [("CLONE_OPTION", JArr [JNum 1, JStr menu])])
-                    ])
-              , ( menu
-                , JObj
-                    [ ("opcode", JStr "control_create_clone_of_menu")
-                    , ("parent", JStr this)
-                    , ( "fields"
-                      , JObj [("CLONE_OPTION", JArr [JStr "_myself_", JNull])])
-                    , ("shadow", JBool True)
-                    ])
-              ]
-            pure (Just this, Just this)
+          let menu =
+                buildShadow "control_create_clone_of_menu" $
+                InputFields
+                  []
+                  [("CLONE_OPTION", pure $ JArr [JStr "_myself_", JNull])]
+           in buildStacking "control_create_clone_of" $
+              InputFields [("CLONE_OPTION", noShadow <$> menu)] []
         _ -> throwError $ InvalidArgsForBuiltinProc "clone-myself")
   ]
   where
@@ -448,14 +427,14 @@ builtinProcs =
 
 varField :: T.Text -> Blocky JValue
 varField name = do
-  vars <- asks $ fold [_envLocalVars, _envSpriteVars, _envGlobalVars]
+  vars <- asks $ envLocalVars <> envSpriteVars <> envGlobalVars
   case lookup name vars of
     Just (varID, name') -> pure $ JArr [JStr name', JStr varID]
     Nothing -> throwError $ VarDoesntExist name
 
 listField :: T.Text -> Blocky JValue
 listField name = do
-  lists <- asks $ fold [_envLocalLists, _envSpriteLists, _envGlobalLists]
+  lists <- asks $ envLocalLists <> envSpriteLists <> envGlobalLists
   case lookup name lists of
     Just (listID, name') -> pure $ JArr [JStr name', JStr listID]
     Nothing -> throwError $ ListDoesntExist name
@@ -474,7 +453,7 @@ stackBlock opcode inputs procName args
      in buildStacking opcode $ InputFields inputs' []
 
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
-bStmts [] = asks $ (Nothing, ) . _envParent
+bStmts [] = asks $ (Nothing, ) . envParent
 bStmts [x] = bStmt x
 bStmts (x:xs) =
   mdo (firstStart, firstEnd) <- withNext restStart $ bStmt x
@@ -485,9 +464,9 @@ bExpr :: Expr -> Blocky Reporter
 bExpr (Lit lit) = pure $ Shadow $ JArr [JNum 10, JStr $ toString lit]
 bExpr (Sym sym) = do
   env <- ask
-  let procArgs = _envProcArgs env
-      vars = fold [_envLocalVars, _envSpriteVars, _envGlobalVars] env
-      lists = fold [_envLocalLists, _envSpriteLists, _envGlobalLists] env
+  let procArgs = envProcArgs env
+      vars = envLocalVars <> envSpriteVars <> envGlobalVars $ env
+      lists = envLocalLists <> envSpriteLists <> envGlobalLists $ env
       theProcArg =
         guard (sym `elem` procArgs) $>
         buildNonShadow
@@ -501,7 +480,7 @@ bExpr (Sym sym) = do
           pure $ NonShadow $ JArr [JNum 13, JStr name, JStr i]
       theBuiltin = lookup sym builtinSymbols
   fromMaybe (throwError $ UnknownSymbolInExpr sym) $
-    getFirst $ foldMap First [theProcArg, theVar, theList, theBuiltin]
+    theProcArg <|> theVar <|> theList <|> theBuiltin
 bExpr (FuncCall name args) =
   maybe (throwError $ UnknownFunc name) ($ args) $ lookup name builtinFuncs
 
@@ -630,7 +609,7 @@ withLocals :: [T.Text] -> [T.Text] -> Blocky a -> Blocky a
 withLocals vars lists comp = do
   vars' <- for vars $ \v -> newID <&> \i -> (v, (i, mangle v i))
   lists' <- for lists $ \v -> newID <&> \i -> (v, (i, mangle v i))
-  local (\env -> env {_envLocalVars = vars', _envLocalLists = lists'}) comp
+  local (\env -> env {envLocalVars = vars', envLocalLists = lists'}) comp
   where
     mangle v i = "local " <> i <> " " <> v
 
@@ -638,5 +617,5 @@ withLocals vars lists comp = do
 boil :: (UID -> Maybe UID -> Blocky a) -> Blocky a
 boil computation = do
   this <- newID
-  parent <- asks _envParent
+  parent <- asks envParent
   withParent (Just this) $ computation this parent
