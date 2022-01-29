@@ -22,13 +22,12 @@ import Control.Monad.Writer (tell)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Text as T
-import Data.Text.Lazy (toStrict)
-import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Traversable (for)
-import JSON (JValue(..), showJSON)
+import JSON (JValue(..), showJStr)
 import Mid.Expr (Expr(..), Value(..), toString)
 import Mid.Proc (Procedure(..), Statement(..))
 import UID (UID, UIDState, idJSON, newID)
+import Utils.Text (arrayify)
 import Utils.Trans (orThrow)
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
@@ -179,13 +178,10 @@ bProc (Procedure name params body vars lists) = do
       let paramIDs = snd <$> fromJust (lookup name exisitingProcs)
       reporters <-
         fmap noShadow <$> withParent (Just protoypeID) (traverse bExpr params)
-      let argumentids =
-            toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
-      let argumentnames =
-            toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> params'
-      let argumentdefaults =
-            toStrict $ decodeUtf8 $ showJSON $ JArr $ params' $> JStr ""
-      let proccode = name <> T.replicate (length params) " %s"
+      let argumentids = arrayify $ showJStr <$> paramIDs
+          argumentnames = arrayify $ showJStr <$> params'
+          argumentdefaults = arrayify $ "\"\"" <$ params
+          proccode = name <> T.replicate (length params) " %s"
       tell
         [ ( this
           , JObj
@@ -287,8 +283,7 @@ callCustomProc name args =
     args' <- fmap emptyShadow <$> traverse bExpr args
     let inputs = zip paramIDs args'
         proccode = name <> T.replicate (length args) " %s"
-        argumentids =
-          toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
+        argumentids = arrayify $ showJStr <$> paramIDs
     tell
       [ ( this
         , JObj

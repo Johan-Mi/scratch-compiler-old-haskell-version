@@ -3,6 +3,7 @@
 module JSON
   ( JValue(..)
   , showJSON
+  , showJStr
   ) where
 
 import qualified Data.ByteString.Builder as B
@@ -42,6 +43,9 @@ showJSON = B.toLazyByteString . go
         (intersperse (B.charUtf8 ',') $
          (\(key, val) -> fmtString key <> B.charUtf8 ':' <> go val) <$> obj) <>
       B.charUtf8 '}'
+
+showJStr :: T.Text -> T.Text
+showJStr str = "\"" <> T.concatMap escape str <> "\""
 
 escape :: Char -> T.Text
 escape '"' = "\\\""
