@@ -11,13 +11,11 @@ module Mid.Sprite
   , lists
   ) where
 
-import Data.Maybe (listToMaybe)
 import qualified Data.Text as T
 import Lens.Micro (Lens')
 import LispAST (LispAST(..), asTheFunction)
 import Mid.Error (MidError(..))
 import Mid.Proc (Procedure, mkListDecl, mkProc, mkVarDecl)
-import Utils.Either (justFailWith)
 import Utils.Maybe (partitionMaybe)
 
 data Sprite =
@@ -58,7 +56,9 @@ mkSprite (LispNode (LispSym "sprite") (LispString name':args)) = do
       (args2, varDecls) = partitionMaybe mkVarDecl args1
       (args3, listDecls) = partitionMaybe mkListDecl args2
       (remaining, procDefs) = partitionMaybe mkProc args3
-  justFailWith InvalidItemInSprite $ listToMaybe remaining
+  case remaining of
+    [] -> pure ()
+    (item:_) -> Left $ InvalidItemInSprite item
   costumes' <- concat <$> sequenceA costumeLists
   vars <- concat <$> sequenceA varDecls
   lists' <- concat <$> sequenceA listDecls
