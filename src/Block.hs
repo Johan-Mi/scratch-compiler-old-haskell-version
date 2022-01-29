@@ -221,40 +221,6 @@ bProc (Procedure name params body vars lists) = do
         ]
 
 bStmt :: Statement -> Blocky (Maybe UID, Maybe UID)
-bStmt (ProcCall procName args) =
-  case lookup procName builtinProcs of
-    Just fn -> fn args
-    Nothing ->
-      boil $ \this parent -> do
-        exisitingProcs <- asks envProcs
-        paramIDs <-
-          orThrow (UnknownProc procName) $
-          fmap snd <$> lookup procName exisitingProcs
-        next <- asks envNext
-        args' <- fmap emptyShadow <$> traverse bExpr args
-        let inputs = zip paramIDs args'
-            proccode = procName <> T.replicate (length args) " %s"
-            argumentids =
-              toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
-        tell
-          [ ( this
-            , JObj
-                [ ("opcode", JStr "procedures_call")
-                , ("next", idJSON next)
-                , ("parent", idJSON parent)
-                , ("inputs", JObj inputs)
-                , ("fields", JObj [])
-                , ( "mutation"
-                  , JObj
-                      [ ("tagName", JStr "mutation")
-                      , ("children", JArr [])
-                      , ("proccode", JStr proccode)
-                      , ("argumentids", JStr argumentids)
-                      , ("warp", JStr "true")
-                      ])
-                ])
-          ]
-        pure (Just this, Just this)
 bStmt (Do xs) = bStmts xs
 bStmt (IfElse cond true false) =
   boil $ \this parent -> do
@@ -306,6 +272,42 @@ bStmt (For var times body) =
       body' = bSubstack body
    in buildStacking "control_for_each" $
       InputFields [("VALUE", times'), ("SUBSTACK", body')] [("VARIABLE", var')]
+bStmt (ProcCall name args) =
+  case lookup name builtinProcs of
+    Just fn -> fn args
+    Nothing -> callCustomProc name args
+
+callCustomProc :: T.Text -> [Expr] -> Blocky (Maybe UID, Maybe UID)
+callCustomProc name args =
+  boil $ \this parent -> do
+    exisitingProcs <- asks envProcs
+    paramIDs <-
+      orThrow (UnknownProc name) $ fmap snd <$> lookup name exisitingProcs
+    next <- asks envNext
+    args' <- fmap emptyShadow <$> traverse bExpr args
+    let inputs = zip paramIDs args'
+        proccode = name <> T.replicate (length args) " %s"
+        argumentids =
+          toStrict $ decodeUtf8 $ showJSON $ JArr $ JStr <$> paramIDs
+    tell
+      [ ( this
+        , JObj
+            [ ("opcode", JStr "procedures_call")
+            , ("next", idJSON next)
+            , ("parent", idJSON parent)
+            , ("inputs", JObj inputs)
+            , ("fields", JObj [])
+            , ( "mutation"
+              , JObj
+                  [ ("tagName", JStr "mutation")
+                  , ("children", JArr [])
+                  , ("proccode", JStr proccode)
+                  , ("argumentids", JStr argumentids)
+                  , ("warp", JStr "true")
+                  ])
+            ])
+      ]
+    pure (Just this, Just this)
 
 builtinProcs :: [(T.Text, [Expr] -> Blocky (Maybe UID, Maybe UID))]
 builtinProcs =
