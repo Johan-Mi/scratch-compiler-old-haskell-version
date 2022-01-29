@@ -325,6 +325,7 @@ builtinProcs =
    , ("set-x", "motion_setx", [val "X"])
    , ("set-y", "motion_sety", [val "Y"])
    , ("wait", "control_wait", [val "DURATION"])
+   , ("ask", "sensing_askandwait", [val "QUESTION"])
    ]) <>
   [ ( "send-broadcast-sync"
     , \case
@@ -597,12 +598,13 @@ bSubstack = fmap (\(i, _) -> JArr [JNum 2, idJSON i]) . withNext Nothing . bStmt
 
 builtinSymbols :: [(T.Text, Blocky Reporter)]
 builtinSymbols =
-  [ ("x-pos", simpleSymbol "motion_xposition")
-  , ("y-pos", simpleSymbol "motion_yposition")
-  , ("timer", simpleSymbol "sensing_timer")
+  fmap simpleSymbol <$>
+  [ ("x-pos", "motion_xposition")
+  , ("y-pos", "motion_yposition")
+  , ("timer", "sensing_timer")
+  , ("answer", "sensing_answer")
   ]
   where
-    simpleSymbol :: T.Text -> Blocky Reporter
     simpleSymbol opcode = buildNonShadow opcode $ InputFields [] []
 
 withLocals :: [T.Text] -> [T.Text] -> Blocky a -> Blocky a
