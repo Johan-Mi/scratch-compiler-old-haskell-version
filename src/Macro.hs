@@ -5,7 +5,6 @@ module Macro
   ( expandMacros
   ) where
 
-import Control.Applicative ((<|>))
 import Control.Arrow (left)
 import Control.Monad ((>=>))
 import Control.Monad.Except (Except, ExceptT(..), throwError, withExcept)
@@ -14,8 +13,6 @@ import Control.Monad.Trans (lift)
 import Control.Monad.Writer.Strict (WriterT, execWriterT, tell)
 import Data.Char (isPrint)
 import Data.Foldable (traverse_)
-import Data.Functor ((<&>))
-import Data.Maybe (fromMaybe)
 import Data.Monoid (Any(..), First(..))
 import qualified Data.Text as T
 import qualified Data.Text.IO as IO
@@ -53,19 +50,17 @@ type MacroM = ExceptT Error IO
 
 type Macro = LispAST -> Maybe (MacroM LispAST)
 
-mkMacro :: LispAST -> Maybe (Except MacroError Macro)
-mkMacro =
-  flip asTheFunction "macro" $ \case
-    [LispSym name, body] ->
-      pure $ \case
-        LispSym name'
-          | name' == name -> Just $ pure body
-        _ -> Nothing
-    [LispNode name params, body] -> do
-      name' <- orThrow NonSymbolMacroName $ getSym name
-      params' <- orThrow (NonSymbolParam name') $ traverse getSym params
-      pure $ mkFuncMacro name' params' body
-    _ -> throwError InvalidMacroDefinition
+mkMacro :: [LispAST] -> Except MacroError Macro
+mkMacro [LispSym name, body] =
+  pure $ \case
+    LispSym name'
+      | name' == name -> Just $ pure body
+    _ -> Nothing
+mkMacro [LispNode name params, body] = do
+  name' <- orThrow NonSymbolMacroName $ getSym name
+  params' <- orThrow (NonSymbolParam name') $ traverse getSym params
+  pure $ mkFuncMacro name' params' body
+mkMacro _ = throwError InvalidMacroDefinition
 
 mkFuncMacro :: T.Text -> [T.Text] -> LispAST -> Macro
 mkFuncMacro name params body = f `asTheFunction` name
@@ -89,27 +84,25 @@ subst name mvars = go
 expand :: Macro -> LispAST -> MacroM LispAST
 expand m = go
   where
-    go = subTrees go >=> \ast' -> maybe (pure ast') (>>= go) $ m ast'
+    go = subTrees go >=> \ast -> maybe (pure ast) (>>= go) $ m ast
 
-include :: LispAST -> Maybe (MacroM [LispAST])
-include =
-  flip asTheFunction "include" $ \case
-    [LispString path] ->
-      ExceptT $ left Error <$> parseFromFile programP (T.unpack path)
-    _ -> throwError $ Error InvalidArgsForInclude
+include :: [LispAST] -> MacroM [LispAST]
+include [LispString path] =
+  ExceptT $ left Error <$> parseFromFile programP (T.unpack path)
+include _ = throwError $ Error InvalidArgsForInclude
 
 expandList :: [LispAST] -> WriterT [LispAST] (StateT Macro MacroM) ()
 expandList =
   traverse_ $ \ast -> do
     macros <- get
     ast' <- lift $ lift $ expand macros ast
-    let theMacro =
-          mkMacro ast' <&> \m -> do
-            m' <- lift $ lift $ hoistExcept $ withExcept Error m
-            put $ getFirst . (First . macros <> First . m')
-        theInclude = include ast <&> (lift . lift >=> expandList)
-        theNormal = tell [ast']
-    fromMaybe theNormal $ theMacro <|> theInclude
+    case ast' of
+      (LispNode (LispSym "macro") args) -> do
+        m <- lift $ lift $ hoistExcept $ withExcept Error $ mkMacro args
+        put $ getFirst . (First . macros <> First . m)
+      (LispNode (LispSym "include") args) ->
+        lift (lift $ include args) >>= expandList
+      other -> tell [other]
 
 expandMacros :: [LispAST] -> MacroM [LispAST]
 expandMacros =
@@ -130,10 +123,10 @@ builtinMacros =
       (LispNode fn asts)
         | didSomething -> Just $ LispNode fn . concat <$> sequenceA asts'
         where (Any didSomething, asts') =
-                for asts $ \ast ->
-                  case include ast of
-                    Just included -> (Any True, included)
-                    Nothing -> (Any False, pure [ast])
+                for asts $ \case
+                  (LispNode (LispSym "include") args) ->
+                    (Any True, include args)
+                  ast -> (Any False, pure [ast])
       _ -> Nothing
   , \case
       (LispNode (LispSym "include-str") [LispString path]) ->
