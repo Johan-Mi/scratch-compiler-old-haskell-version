@@ -14,6 +14,7 @@ data BlockError
   | InvalidArgsForBuiltinProc T.Text
   | InvalidArgsForBuiltinFunc T.Text
   | FuncWrongArgCount T.Text ArgCount Int
+  | ProcWrongArgCount T.Text ArgCount Int
   | UnknownSymbolInExpr T.Text
   | NonSymbolInProcDef T.Text
   | UnknownFunc T.Text
@@ -30,6 +31,11 @@ instance IsError BlockError where
     "invalid arguments for call to builtin function `" <> funcName <> "`"
   showError (FuncWrongArgCount name expected got) =
     "function `" <>
+    name <>
+    "` expected " <>
+    T.pack (show expected) <> " arguments but got " <> T.pack (show got)
+  showError (ProcWrongArgCount name expected got) =
+    "procedure `" <>
     name <>
     "` expected " <>
     T.pack (show expected) <> " arguments but got " <> T.pack (show got)

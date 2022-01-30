@@ -279,6 +279,10 @@ callCustomProc name args =
     exisitingProcs <- asks envProcs
     paramIDs <-
       orThrow (UnknownProc name) $ fmap snd <$> lookup name exisitingProcs
+    let nparams = length paramIDs
+        nargs = length args
+    unless (nparams == nargs) $
+      throwError $ ProcWrongArgCount name (Exactly nparams) nargs
     next <- asks envNext
     args' <- fmap emptyShadow <$> traverse bExpr args
     let inputs = zip paramIDs args'
