@@ -24,6 +24,7 @@ import Text.Parsec
   , many1
   , noneOf
   , oneOf
+  , option
   , optional
   , skipMany
   , space
@@ -63,15 +64,14 @@ exprP = choice [try numP, stringP, symP, nodeP, unquoteP] <?> "expression"
 --   DecimalDigits? . DecimalDigits[~Sep]opt ExponentPart?
 --   DecimalDigits ExponentPart[~Sep]opt
 numberP :: Parser Double
-numberP = read <$> pm (choice [hexInt, expDec, dec, int])
+numberP = read <$> signed (choice [hexInt, dec])
   where
-    pm p = (char '-' <:> p) <|> (optional (char '+') *> p)
+    signed p = (char '-' <:> p) <|> (optional (char '+') *> p)
     int = many1 digit
-    negInt = char '-' <:> int
     hexInt = try $ char '0' <:> oneOf "xX" <:> many1 hexDigit
-    dec = try $ many1 digit <> (char '.' <:> ((<> "0") <$> many digit))
-    decOrInt = dec <|> int
-    expDec = try $ decOrInt <> (oneOf "eE" <:> (int <|> negInt))
+    dec = int <> option "" decimalPart <> option "" exponentPart
+    decimalPart = char '.' <:> ((<> "0") <$> many digit)
+    exponentPart = oneOf "eE" <:> signed int
 
 numP :: Parser LispAST
 numP = LispNum <$> numberP <?> "number"
