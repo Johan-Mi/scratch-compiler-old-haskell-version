@@ -19,6 +19,7 @@ import Control.Monad.Reader (ReaderT, ask, asks, local)
 import Control.Monad.State (StateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer (tell)
+import Data.Foldable (fold)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Text as T
@@ -52,6 +53,12 @@ data InputFields =
     { _inputs :: [(T.Text, Blocky JValue)]
     , _fields :: [(T.Text, Blocky JValue)]
     }
+
+instance Semigroup InputFields where
+  InputFields i f <> InputFields i' f' = InputFields (i <> i') (f <> f')
+
+instance Monoid InputFields where
+  mempty = InputFields [] []
 
 buildReporterOf ::
      (JValue -> Reporter) -> T.Text -> InputFields -> Blocky Reporter
@@ -310,85 +317,44 @@ callCustomProc name args =
 
 builtinProcs :: [(T.Text, [Expr] -> Blocky (Maybe UID, Maybe UID))]
 builtinProcs =
-  ((\(name, opcode, fields) -> (name, stackBlock opcode fields name)) <$>
+  ((\(name, opcode, inputs) -> (name, stackBlock opcode inputs name)) <$>
    [ ("erase-all", "pen_clear", [])
    , ("stamp", "pen_stamp", [])
    , ("pen-down", "pen_penDown", [])
    , ("pen-up", "pen_penUp", [])
-   , ("set-xy", "motion_gotoxy", [val "X", val "Y"])
-   , ("set-size", "looks_setsizeto", [val "SIZE"])
-   , ("set-costume", "looks_switchcostumeto", [val "COSTUME"])
+   , ("set-xy", "motion_gotoxy", [num "X", num "Y"])
+   , ("set-size", "looks_setsizeto", [num "SIZE"])
+   , ("set-costume", "looks_switchcostumeto", [string "COSTUME"])
    , ("show", "looks_show", [])
    , ("hide", "looks_hide", [])
-   , ("say", "looks_say", [val "MESSAGE"])
-   , ("change-x", "motion_changexby", [val "DX"])
-   , ("change-y", "motion_changeyby", [val "DY"])
-   , ("set-x", "motion_setx", [val "X"])
-   , ("set-y", "motion_sety", [val "Y"])
-   , ("wait", "control_wait", [val "DURATION"])
-   , ("ask", "sensing_askandwait", [val "QUESTION"])
+   , ("say", "looks_say", [string "MESSAGE"])
+   , ("change-x", "motion_changexby", [num "DX"])
+   , ("change-y", "motion_changeyby", [num "DY"])
+   , ("set-x", "motion_setx", [num "X"])
+   , ("set-y", "motion_sety", [num "Y"])
+   , ("wait", "control_wait", [num "DURATION"])
+   , ("ask", "sensing_askandwait", [string "QUESTION"])
+   , ( "send-broadcast-sync"
+     , "event_broadcastandwait"
+     , [ \name ->
+           let name' =
+                 case name of
+                   Lit lit ->
+                     pure $
+                     JArr [JNum 1, JArr [JNum 11, JStr (toString lit), JStr ""]]
+                   n -> noShadow <$> bExpr n
+            in InputFields [("BROADCAST_INPUT", name')] []
+       ])
+   , (":=", "data_setvariableto", [variable "VARIABLE" ":=", string "VALUE"])
+   , ("+=", "data_changevariableby", [variable "VARIABLE" "+=", string "VALUE"])
+   , ( "replace"
+     , "data_replaceitemoflist"
+     , [list "LIST" "replace", num "INDEX", string "ITEM"])
+   , ("append", "data_addtolist", [list "LIST" "append", string "ITEM"])
+   , ("delete", "data_deleteoflist", [list "LIST" "delete", num "INDEX"])
+   , ("delete-all", "data_deletealloflist", [list "LIST" "delete-all"])
    ]) <>
-  [ ( "send-broadcast-sync"
-    , \case
-        [name] ->
-          let name' =
-                case name of
-                  Lit lit ->
-                    pure $
-                    JArr [JNum 1, JArr [JNum 11, JStr (toString lit), JStr ""]]
-                  n -> noShadow <$> bExpr n
-           in buildStacking "event_broadcastandwait" $
-              InputFields [("BROADCAST_INPUT", name')] []
-        _ -> throwError $ InvalidArgsForBuiltinProc "send-broadcast-sync")
-  , ( ":="
-    , \case
-        [Sym varName, value] ->
-          let variable' = varField varName
-              value' = emptyShadow <$> bExpr value
-           in buildStacking "data_setvariableto" $
-              InputFields [("VALUE", value')] [("VARIABLE", variable')]
-        _ -> throwError $ InvalidArgsForBuiltinProc ":=")
-  , ( "+="
-    , \case
-        [Sym varName, value] ->
-          let variable' = varField varName
-              value' = emptyShadow <$> bExpr value
-           in buildStacking "data_changevariableby" $
-              InputFields [("VALUE", value')] [("VARIABLE", variable')]
-        _ -> throwError $ InvalidArgsForBuiltinProc "+=")
-  , ( "replace"
-    , \case
-        [Sym listName, index, item] ->
-          let list' = listField listName
-              index' = emptyShadow <$> bExpr index
-              item' = emptyShadow <$> bExpr item
-           in buildStacking "data_replaceitemoflist" $
-              InputFields [("INDEX", index'), ("ITEM", item')] [("LIST", list')]
-        _ -> throwError $ InvalidArgsForBuiltinProc "replace")
-  , ( "append"
-    , \case
-        [Sym listName, item] ->
-          let list' = listField listName
-              item' = emptyShadow <$> bExpr item
-           in buildStacking "data_addtolist" $
-              InputFields [("ITEM", item')] [("LIST", list')]
-        _ -> throwError $ InvalidArgsForBuiltinProc "append")
-  , ( "delete"
-    , \case
-        [Sym listName, index] ->
-          let list' = listField listName
-              index' = emptyShadow <$> bExpr index
-           in buildStacking "data_deleteoflist" $
-              InputFields [("INDEX", index')] [("LIST", list')]
-        _ -> throwError $ InvalidArgsForBuiltinProc "delete")
-  , ( "delete-all"
-    , \case
-        [Sym listName] ->
-          let list' = listField listName
-           in buildStacking "data_deletealloflist" $
-              InputFields [] [("LIST", list')]
-        _ -> throwError $ InvalidArgsForBuiltinProc "delete-all")
-  , ( "stop-all"
+  [ ( "stop-all"
     , \case
         [] ->
           buildStacking "control_stop" $
@@ -425,7 +391,24 @@ builtinProcs =
         _ -> throwError $ InvalidArgsForBuiltinProc "clone-myself")
   ]
   where
-    val = (, fmap emptyShadow . bExpr)
+    string name expr = InputFields [(name, emptyShadow <$> bExpr expr)] []
+    num = string
+    variable name procName expr =
+      InputFields
+        []
+        [ ( name
+          , case expr of
+              Sym varName -> varField varName
+              _ -> throwError $ InvalidArgsForBuiltinProc procName)
+        ]
+    list name procName expr =
+      InputFields
+        []
+        [ ( name
+          , case expr of
+              Sym listName -> listField listName
+              _ -> throwError $ InvalidArgsForBuiltinProc procName)
+        ]
 
 varField :: T.Text -> Blocky JValue
 varField name = do
@@ -443,16 +426,14 @@ listField name = do
 
 stackBlock ::
      T.Text
-  -> [(T.Text, Expr -> Blocky JValue)]
+  -> [Expr -> InputFields]
   -> T.Text
   -> [Expr]
   -> Blocky (Maybe UID, Maybe UID)
 stackBlock opcode inputs procName args
   | length args /= length inputs =
     throwError $ InvalidArgsForBuiltinProc procName
-  | otherwise =
-    let inputs' = zipWith (\(name, fn) arg -> (name, fn arg)) inputs args
-     in buildStacking opcode $ InputFields inputs' []
+  | otherwise = buildStacking opcode $ fold $ zipWith ($) inputs args
 
 bStmts :: [Statement] -> Blocky (Maybe UID, Maybe UID)
 bStmts [] = asks $ (Nothing, ) . envParent
