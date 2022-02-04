@@ -354,41 +354,21 @@ builtinProcs =
    , ("delete", "data_deleteoflist", [list "LIST" "delete", num "INDEX"])
    , ("delete-all", "data_deletealloflist", [list "LIST" "delete-all"])
    ]) <>
-  [ ( "stop-all"
-    , \case
-        [] ->
-          buildStacking "control_stop" $
-          InputFields [] [("STOP_OPTION", pure $ JArr [JStr "all", JNull])]
-        _ -> throwError $ InvalidArgsForBuiltinProc "stop-all")
-  , ( "stop-this-script"
-    , \case
-        [] ->
-          buildStacking "control_stop" $
+  [ nullary "stop-all" "control_stop" $
+    InputFields [] [("STOP_OPTION", pure $ JArr [JStr "all", JNull])]
+  , nullary "stop-this-script" "control_stop" $
+    InputFields [] [("STOP_OPTION", pure $ JArr [JStr "this script", JNull])]
+  , nullary "stop-other-scripts" "control_stop" $
+    InputFields
+      []
+      [("STOP_OPTION", pure $ JArr [JStr "other scripts in sprite", JNull])]
+  , let menu =
+          buildShadow "control_create_clone_of_menu" $
           InputFields
             []
-            [("STOP_OPTION", pure $ JArr [JStr "this script", JNull])]
-        _ -> throwError $ InvalidArgsForBuiltinProc "stop-this-script")
-  , ( "stop-other-scripts"
-    , \case
-        [] ->
-          buildStacking "control_stop" $
-          InputFields
-            []
-            [ ( "STOP_OPTION"
-              , pure $ JArr [JStr "other scripts in sprite", JNull])
-            ]
-        _ -> throwError $ InvalidArgsForBuiltinProc "stop-other-scripts")
-  , ( "clone-myself"
-    , \case
-        [] ->
-          let menu =
-                buildShadow "control_create_clone_of_menu" $
-                InputFields
-                  []
-                  [("CLONE_OPTION", pure $ JArr [JStr "_myself_", JNull])]
-           in buildStacking "control_create_clone_of" $
-              InputFields [("CLONE_OPTION", noShadow <$> menu)] []
-        _ -> throwError $ InvalidArgsForBuiltinProc "clone-myself")
+            [("CLONE_OPTION", pure $ JArr [JStr "_myself_", JNull])]
+     in nullary "clone-myself" "control_create_clone_of" $
+        InputFields [("CLONE_OPTION", noShadow <$> menu)] []
   ]
   where
     string name expr = InputFields [(name, emptyShadow <$> bExpr expr)] []
@@ -409,6 +389,11 @@ builtinProcs =
               Sym listName -> listField listName
               _ -> throwError $ InvalidArgsForBuiltinProc procName)
         ]
+    nullary name opcode inputs =
+      ( name
+      , \case
+          [] -> buildStacking opcode inputs
+          _ -> throwError $ InvalidArgsForBuiltinProc name)
 
 varField :: T.Text -> Blocky JValue
 varField name = do
