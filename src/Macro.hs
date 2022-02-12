@@ -130,12 +130,6 @@ builtinMacros =
       _ -> Nothing
   , \case
       (LispNode (LispSym "include-str") [LispString path]) ->
-        Just $
-        lift $ LispString . T.map normalizeChar <$> IO.readFile (T.unpack path)
+        Just $ lift $ LispString <$> IO.readFile (T.unpack path)
       _ -> Nothing
   ]
-
-normalizeChar :: Char -> Char
-normalizeChar c
-  | isPrint c = c
-  | otherwise = ' '
