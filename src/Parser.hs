@@ -82,7 +82,7 @@ stringP =
   (char '"' *> stringContent <* char '"') <?> "string literal"
   where
     stringContent = many $ (char '\\' *> escaped) <|> noneOf "\n\"\\"
-    escaped = oneOf "\"\\"
+    escaped = oneOf "\"\\" <|> ('\n' <$ char 'n')
 
 symP :: Parser LispAST
 symP = LispSym . T.pack <$> (firstChar <:> many nonFirstChar) <?> "symbol"
