@@ -113,10 +113,10 @@ builtinMacros =
   [ \case
       (LispNode (LispSym "sym-concat!") args) ->
         pure . LispSym . T.concat <$> traverse getSym args
-      _ -> Nothing
-  , \case
       (LispNode (LispSym "str-concat!") args) ->
         pure . LispString . T.concat <$> traverse getStr args
+      (LispNode (LispSym "include-str") [LispString path]) ->
+        Just $ lift $ LispString <$> IO.readFile (T.unpack path)
       _ -> Nothing
   , \case
       (LispNode fn asts)
@@ -126,9 +126,5 @@ builtinMacros =
                   (LispNode (LispSym "include") args) ->
                     (Any True, include args)
                   ast -> (Any False, pure [ast])
-      _ -> Nothing
-  , \case
-      (LispNode (LispSym "include-str") [LispString path]) ->
-        Just $ lift $ LispString <$> IO.readFile (T.unpack path)
       _ -> Nothing
   ]
