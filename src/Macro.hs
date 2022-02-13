@@ -11,7 +11,6 @@ import Control.Monad.Except (Except, ExceptT(..), throwError, withExcept)
 import Control.Monad.State (StateT, evalStateT, get, put)
 import Control.Monad.Trans (lift)
 import Control.Monad.Writer.Strict (WriterT, execWriterT, tell)
-import Data.Char (isPrint)
 import Data.Foldable (traverse_)
 import Data.Monoid (Any(..), First(..))
 import qualified Data.Text as T
