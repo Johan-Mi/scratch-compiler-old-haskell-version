@@ -33,17 +33,20 @@ import Utils.Trans (orThrow)
 
 type Blocky = RWST Env [(UID, JValue)] UIDState (Except BlockError)
 
-data Reporter
-  = Shadow JValue
-  | NonShadow JValue
+data Reporter =
+  Rep Shape JValue
+
+data Shape
+  = Shadow
+  | NonShadow
 
 noShadow :: Reporter -> JValue
-noShadow (Shadow jv) = JArr [JNum 1, jv]
-noShadow (NonShadow jv) = JArr [JNum 2, jv]
+noShadow (Rep Shadow jv) = JArr [JNum 1, jv]
+noShadow (Rep NonShadow jv) = JArr [JNum 2, jv]
 
 withShadow :: JValue -> Reporter -> JValue
-withShadow _ (Shadow jv) = JArr [JNum 1, jv]
-withShadow obscured (NonShadow jv) = JArr [JNum 3, jv, obscured]
+withShadow _ (Rep Shadow jv) = JArr [JNum 1, jv]
+withShadow obscured (Rep NonShadow jv) = JArr [JNum 3, jv, obscured]
 
 emptyShadow :: Reporter -> JValue
 emptyShadow = withShadow $ JArr [JNum 10, JStr ""]
@@ -60,9 +63,8 @@ instance Semigroup InputFields where
 instance Monoid InputFields where
   mempty = InputFields [] []
 
-buildReporterOf ::
-     (JValue -> Reporter) -> T.Text -> InputFields -> Blocky Reporter
-buildReporterOf shadow opcode (InputFields inputs fields) = do
+buildReporterOf :: Shape -> T.Text -> InputFields -> Blocky Reporter
+buildReporterOf shape opcode (InputFields inputs fields) = do
   this <- newID
   parent <- asks envParent
   withParent (Just this) $ do
@@ -77,7 +79,7 @@ buildReporterOf shadow opcode (InputFields inputs fields) = do
             , ("fields", JObj fields')
             ])
       ]
-    pure $ shadow $ JStr this
+    pure $ Rep shape $ JStr this
 
 buildNonShadow :: T.Text -> InputFields -> Blocky Reporter
 buildNonShadow = buildReporterOf NonShadow
@@ -429,7 +431,7 @@ bStmts (x:xs) =
       pure (firstStart, restEnd)
 
 bExpr :: Expr -> Blocky Reporter
-bExpr (Lit lit) = pure $ Shadow $ JArr [JNum 10, JStr $ toString lit]
+bExpr (Lit lit) = pure $ Rep Shadow $ JArr [JNum 10, JStr $ toString lit]
 bExpr (Sym sym) = do
   env <- ask
   let procArgs = envProcArgs env
@@ -442,10 +444,10 @@ bExpr (Sym sym) = do
           (InputFields [] [("VALUE", pure $ JArr [JStr sym, JNull])])
       theVar =
         lookup sym vars <&> \(i, name) ->
-          pure $ NonShadow $ JArr [JNum 12, JStr name, JStr i]
+          pure $ Rep NonShadow $ JArr [JNum 12, JStr name, JStr i]
       theList =
         lookup sym lists <&> \(i, name) ->
-          pure $ NonShadow $ JArr [JNum 13, JStr name, JStr i]
+          pure $ Rep NonShadow $ JArr [JNum 13, JStr name, JStr i]
       theBuiltin = lookup sym builtinSymbols
   fromMaybe (throwError $ UnknownSymbolInExpr sym) $
     theProcArg <|> theVar <|> theList <|> theBuiltin
