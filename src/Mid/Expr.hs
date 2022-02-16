@@ -67,8 +67,7 @@ toString (VNum num')
         let (before, after) = splitAt n dstr
          in B.fromString before <> B.singleton '.' <> B.fromString after
       | (-6) < n && n <= 0 =
-        B.fromText "0." <>
-        B.fromText (T.replicate (-n) "0") <> B.fromString dstr
+        "0." <> B.fromText (T.replicate (-n) "0") <> B.fromString dstr
       | k == 1 = B.fromString dstr <> middle <> B.fromString (show $ n - 1)
       | otherwise =
         let (d:ds) = dstr
@@ -82,7 +81,7 @@ toString (VNum num')
         power = n - k
         middle =
           if n > 0
-            then B.fromText "e+"
+            then "e+"
             else B.singleton 'e'
 toString (VBool True) = "true"
 toString (VBool False) = "false"
