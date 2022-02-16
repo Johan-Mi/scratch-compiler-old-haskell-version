@@ -4,8 +4,7 @@
 {-# LANGUAGE RecursiveDo #-}
 
 module Block
-  ( Env(..)
-  , BlockError
+  ( BlockError
   , procToBlocks
   ) where
 

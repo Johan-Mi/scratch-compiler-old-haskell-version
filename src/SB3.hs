@@ -6,7 +6,8 @@ module SB3
   ) where
 
 import Asset (Asset(assetPath), assetId, assetJSON, makeAsset)
-import Block (BlockError, Env(..), procToBlocks)
+import Block (BlockError, procToBlocks)
+import Block.Env (Env(..))
 import Codec.Archive.Zip
   ( Archive
   , Entry(eRelativePath)
