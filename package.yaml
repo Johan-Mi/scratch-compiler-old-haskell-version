@@ -28,7 +28,6 @@ dependencies:
 - zip-archive
 - binary
 - bytestring
-- filepath
 - pureMD5
 - mtl
 

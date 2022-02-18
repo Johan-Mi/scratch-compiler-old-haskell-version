@@ -56,7 +56,6 @@ library
       base >=4.7 && <5
     , binary
     , bytestring
-    , filepath
     , hspec
     , microlens
     , mtl
@@ -77,7 +76,6 @@ executable scratch-compiler-exe
       base >=4.7 && <5
     , binary
     , bytestring
-    , filepath
     , hspec
     , microlens
     , mtl
@@ -102,7 +100,6 @@ test-suite scratch-compiler-test
       base >=4.7 && <5
     , binary
     , bytestring
-    , filepath
     , hspec
     , microlens
     , mtl
