@@ -22,7 +22,7 @@ stmtOptimizations =
 -- Remove double `not`s
 notNot :: Expr -> Maybe Expr
 notNot (FuncCall "not" [FuncCall "not" [expr]]) =
-  Just $ FuncCall "boolify" [expr]
+  Just $ FuncCall "to-bool" [expr]
 notNot _ = Nothing
 
 -- De Morgan's laws:
